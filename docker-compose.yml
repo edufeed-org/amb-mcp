@@ -34,5 +34,5 @@ services:
       - TS_HOST=http://typesense:8108
       - TS_COLLECTION=amb-mcp-test
       - EMBED_ENDPOINT=https://embed.edufeed.org/embed
-      - EMBED_TOKEN=***REMOVED***
+      - EMBED_TOKEN=${EMBED_TOKEN}
       - SEMANTIC_SEARCH_ENABLED=true

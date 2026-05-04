@@ -1,0 +1,37 @@
+{
+  "name": "amb-mcp",
+  "version": "0.1.0",
+  "description": "ContextVM MCP server for querying AMB educational metadata from Nostr relays",
+  "license": "Unlicense",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "bun run src/index.ts",
+    "stdio": "bun run src/stdio.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@contextvm/sdk": "^0.3.2",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "amb-nostr-converter": "file:../amb-nostr-converter",
+    "applesauce-core": "^5.1.0",
+    "applesauce-relay": "^5.1.0",
+    "applesauce-signers": "^5.1.0",
+    "n3": "^2.0.1",
+    "nostr-tools": "^2.10.0",
+    "qrcode-terminal": "^0.12.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/n3": "^1.26.1",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

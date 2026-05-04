@@ -1,0 +1,281 @@
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+@prefix dm: <https://w3id.org/amb/vocab/didaktische-methoden> .
+
+<https://w3id.org/amb/vocab/didaktische-methoden> a skos:ConceptScheme
+    ; dct:title "Didaktische Methoden im Hochschulbereich"@de
+    ; dct:description "Ein kontrolliertes Vokabular für didaktische Methoden und Lehrformate in der Hochschullehre"@de
+    ; dct:license <https://creativecommons.org/licenses/by/4.0/>
+    ; dct:issued "2026-02-12T10:44:40.823Z"^^xsd:dateTime
+    ; skos:hasTopConcept <https://w3id.org/amb/vocab/didaktische-methoden/vortragsbasierte-methoden>, <https://w3id.org/amb/vocab/didaktische-methoden/diskursive-methoden>, <https://w3id.org/amb/vocab/didaktische-methoden/kooperative-methoden>, <https://w3id.org/amb/vocab/didaktische-methoden/problembasierte-methoden>, <https://w3id.org/amb/vocab/didaktische-methoden/praktische-methoden>, <https://w3id.org/amb/vocab/didaktische-methoden/selbstgesteuerte-methoden>, <https://w3id.org/amb/vocab/didaktische-methoden/feedback-reflexionsmethoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/vortragsbasierte-methoden> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Vortragsbasierte Methoden"@de
+    ; skos:definition "Lehrformate, bei denen der Vortrag durch die Lehrperson im Mittelpunkt steht"@de
+    ; skos:narrower <https://w3id.org/amb/vocab/didaktische-methoden/vorlesung>, <https://w3id.org/amb/vocab/didaktische-methoden/impulsreferat>, <https://w3id.org/amb/vocab/didaktische-methoden/gastvortrag>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/vorlesung> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Vorlesung"@de
+    ; skos:definition "Klassische Form des akademischen Vortrags, bei der eine Lehrperson Inhalte vor einer größeren Gruppe präsentiert"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/vortragsbasierte-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/impulsreferat> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Impulsreferat"@de
+    ; skos:definition "Kurzer, fokussierter Vortrag zur Einführung in ein Thema als Ausgangspunkt für weitere Aktivitäten"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/vortragsbasierte-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/gastvortrag> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Gastvortrag"@de
+    ; skos:definition "Vortrag einer externen Person aus Praxis oder Wissenschaft zur Bereicherung der Lehre"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/vortragsbasierte-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/diskursive-methoden> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Diskursive Methoden"@de
+    ; skos:definition "Lehrformate, die auf Dialog, Diskussion und argumentativen Austausch setzen"@de
+    ; skos:narrower <https://w3id.org/amb/vocab/didaktische-methoden/seminar>, <https://w3id.org/amb/vocab/didaktische-methoden/kolloquium>, <https://w3id.org/amb/vocab/didaktische-methoden/fishbowl-diskussion>, <https://w3id.org/amb/vocab/didaktische-methoden/pro-contra-debatte>, <https://w3id.org/amb/vocab/didaktische-methoden/sokratisches-gespraech>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/seminar> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Seminar"@de
+    ; skos:definition "Lehrveranstaltung mit aktivem Austausch zwischen Lehrenden und Studierenden zu einem Thema"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/diskursive-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/kolloquium> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Kolloquium"@de
+    ; skos:definition "Wissenschaftliches Gespräch zur Präsentation und kritischen Diskussion von Forschungsarbeiten"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/diskursive-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/fishbowl-diskussion> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Fishbowl-Diskussion"@de
+    ; skos:definition "Diskussionsformat mit innerem und äußerem Kreis, bei dem Teilnehmende dynamisch wechseln können"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/diskursive-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/pro-contra-debatte> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Pro-Contra-Debatte"@de
+    ; skos:definition "Strukturierte Diskussion, bei der Argumente für und gegen eine These ausgetauscht werden"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/diskursive-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/sokratisches-gespraech> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Sokratisches Gespräch"@de
+    ; skos:definition "Dialogische Methode, bei der durch gezielte Fragen zur eigenständigen Erkenntnisgewinnung angeleitet wird"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/diskursive-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/kooperative-methoden> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Kooperative Methoden"@de
+    ; skos:definition "Lehrformate, bei denen Studierende gemeinsam in Gruppen lernen und arbeiten"@de
+    ; skos:narrower <https://w3id.org/amb/vocab/didaktische-methoden/gruppenarbeit>, <https://w3id.org/amb/vocab/didaktische-methoden/peer-learning>, <https://w3id.org/amb/vocab/didaktische-methoden/think-pair-share>, <https://w3id.org/amb/vocab/didaktische-methoden/jigsaw-methode>, <https://w3id.org/amb/vocab/didaktische-methoden/world-cafe>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/gruppenarbeit> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Gruppenarbeit"@de
+    ; skos:definition "Gemeinsame Bearbeitung von Aufgaben in Kleingruppen mit dem Ziel des kooperativen Lernens"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/kooperative-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/peer-learning> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Peer-Learning"@de
+    ; skos:definition "Gegenseitiges Lernen unter Studierenden, bei dem Wissen und Erfahrungen ausgetauscht werden"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/kooperative-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/think-pair-share> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Think-Pair-Share"@de
+    ; skos:definition "Dreiphasige Methode: individuelles Nachdenken, Austausch zu zweit, Präsentation im Plenum"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/kooperative-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/jigsaw-methode> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Jigsaw-Methode"@de
+    ; skos:altLabel "Gruppenpuzzle"@de
+    ; skos:definition "Kooperative Methode, bei der Expertengruppen Teilthemen erarbeiten und in Stammgruppen zusammenführen"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/kooperative-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/world-cafe> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "World Café"@de
+    ; skos:definition "Workshop-Format mit wechselnden Tischgruppen zur kreativen Ideenentwicklung"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/kooperative-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/problembasierte-methoden> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Problembasierte Methoden"@de
+    ; skos:definition "Lehrformate, bei denen das Lernen an konkreten Problemen oder Fällen ausgerichtet ist"@de
+    ; skos:narrower <https://w3id.org/amb/vocab/didaktische-methoden/problem-based-learning>, <https://w3id.org/amb/vocab/didaktische-methoden/fallstudie>, <https://w3id.org/amb/vocab/didaktische-methoden/projektarbeit>, <https://w3id.org/amb/vocab/didaktische-methoden/forschendes-lernen>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/problem-based-learning> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Problem-Based Learning"@de
+    ; skos:altLabel "Problembasiertes Lernen"@de, "PBL"@de
+    ; skos:definition "Lernansatz, bei dem komplexe, realitätsnahe Probleme den Ausgangspunkt des Lernens bilden"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/problembasierte-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/fallstudie> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Fallstudie"@de
+    ; skos:altLabel "Case Study"@de
+    ; skos:definition "Analyse und Bearbeitung eines konkreten Falls aus der Praxis zur Anwendung theoretischen Wissens"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/problembasierte-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/projektarbeit> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Projektarbeit"@de
+    ; skos:definition "Selbstständige Bearbeitung einer komplexen Aufgabe über einen längeren Zeitraum mit konkretem Ergebnis"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/problembasierte-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/forschendes-lernen> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Forschendes Lernen"@de
+    ; skos:definition "Lernform, bei der Studierende selbst Forschungsfragen entwickeln und wissenschaftlich bearbeiten"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/problembasierte-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/praktische-methoden> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Praktische Methoden"@de
+    ; skos:definition "Lehrformate mit Schwerpunkt auf praktischer Anwendung und Handlungsorientierung"@de
+    ; skos:narrower <https://w3id.org/amb/vocab/didaktische-methoden/laboruebung>, <https://w3id.org/amb/vocab/didaktische-methoden/praktikum>, <https://w3id.org/amb/vocab/didaktische-methoden/exkursion>, <https://w3id.org/amb/vocab/didaktische-methoden/planspiel>, <https://w3id.org/amb/vocab/didaktische-methoden/rollenspiel>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/laboruebung> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Laborübung"@de
+    ; skos:definition "Praktische Übung im Labor zur Anwendung und Vertiefung theoretischer Kenntnisse"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/praktische-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/praktikum> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Praktikum"@de
+    ; skos:definition "Praxisphase in einer Einrichtung außerhalb der Hochschule zur Anwendung erlernter Kompetenzen"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/praktische-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/exkursion> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Exkursion"@de
+    ; skos:definition "Lehrveranstaltung außerhalb der Hochschule zur Veranschaulichung und Vertiefung von Lehrinhalten"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/praktische-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/planspiel> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Planspiel"@de
+    ; skos:altLabel "Simulation"@de
+    ; skos:definition "Simulierte Entscheidungssituation, in der Teilnehmende Rollen übernehmen und Strategien entwickeln"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/praktische-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/rollenspiel> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Rollenspiel"@de
+    ; skos:definition "Szenische Darstellung von Situationen zur Übung sozialer Kompetenzen und Perspektivwechsel"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/praktische-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/selbstgesteuerte-methoden> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Selbstgesteuerte Methoden"@de
+    ; skos:definition "Lehrformate, bei denen Studierende eigenverantwortlich ihren Lernprozess gestalten"@de
+    ; skos:narrower <https://w3id.org/amb/vocab/didaktische-methoden/selbststudium>, <https://w3id.org/amb/vocab/didaktische-methoden/e-learning>, <https://w3id.org/amb/vocab/didaktische-methoden/flipped-classroom>, <https://w3id.org/amb/vocab/didaktische-methoden/lerntagebuch>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/selbststudium> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Selbststudium"@de
+    ; skos:definition "Eigenständiges Erarbeiten von Inhalten ohne direkte Anleitung durch Lehrende"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/selbstgesteuerte-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/e-learning> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "E-Learning"@de
+    ; skos:altLabel "Online-Kurs"@de, "Online-Lernen"@de
+    ; skos:definition "Computergestütztes Lernen mit digitalen Medien und Lernplattformen"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/selbstgesteuerte-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/flipped-classroom> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Flipped Classroom"@de
+    ; skos:altLabel "Inverted Classroom"@de, "Umgedrehter Unterricht"@de
+    ; skos:definition "Lehrkonzept, bei dem Inhalte vorab selbstständig erarbeitet und in der Präsenz vertieft werden"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/selbstgesteuerte-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/lerntagebuch> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Lerntagebuch"@de
+    ; skos:altLabel "Portfolio"@de, "Lernportfolio"@de
+    ; skos:definition "Dokumentation des eigenen Lernprozesses zur Förderung der Selbstreflexion"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/selbstgesteuerte-methoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/feedback-reflexionsmethoden> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Feedback- und Reflexionsmethoden"@de
+    ; skos:definition "Methoden zur Rückmeldung und zur Förderung der Selbstreflexion im Lernprozess"@de
+    ; skos:narrower <https://w3id.org/amb/vocab/didaktische-methoden/peer-review>, <https://w3id.org/amb/vocab/didaktische-methoden/one-minute-paper>, <https://w3id.org/amb/vocab/didaktische-methoden/muddiest-point>, <https://w3id.org/amb/vocab/didaktische-methoden/blitzlicht>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/peer-review> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Peer-Review"@de
+    ; skos:altLabel "Peer-Feedback"@de
+    ; skos:definition "Gegenseitige Bewertung und Rückmeldung zu Arbeiten unter Studierenden"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/feedback-reflexionsmethoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/one-minute-paper> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "One-Minute-Paper"@de
+    ; skos:definition "Kurze schriftliche Reflexion am Ende einer Lehrveranstaltung zu den wichtigsten Erkenntnissen"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/feedback-reflexionsmethoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/muddiest-point> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Muddiest Point"@de
+    ; skos:definition "Feedback-Methode, bei der Studierende den unklarsten Punkt einer Veranstaltung benennen"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/feedback-reflexionsmethoden>
+    .
+
+<https://w3id.org/amb/vocab/didaktische-methoden/blitzlicht> a skos:Concept
+    ; skos:inScheme <https://w3id.org/amb/vocab/didaktische-methoden>
+    ; skos:prefLabel "Blitzlicht"@de
+    ; skos:definition "Schnelle Runde, in der alle Teilnehmenden kurz ihre Meinung oder Befindlichkeit äußern"@de
+    ; skos:broader <https://w3id.org/amb/vocab/didaktische-methoden/feedback-reflexionsmethoden>
+    .

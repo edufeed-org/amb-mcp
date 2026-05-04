@@ -1,0 +1,38 @@
+# AMB Relay for MCP Testing
+# Relay exposed on port 3337 to avoid conflicts with other test relays
+#
+# Access: ws://localhost:3337
+
+services:
+  typesense:
+    image: typesense/typesense:28.0
+    restart: on-failure
+    volumes:
+      - ./typesense-data:/data
+    command: '--data-dir /data --api-key=xyz --enable-cors'
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8108'"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  amb-relay:
+    build:
+      context: ../amb-relay
+    restart: on-failure
+    ports:
+      - "3337:3334"
+    depends_on:
+      typesense:
+        condition: service_healthy
+    environment:
+      - NAME=AMB Relay (MCP Test)
+      - PUBKEY=1c5ff3caacd842c01dca8f378231b16617516d214da75c7aeabbe9e1efe9c0f6
+      - DESCRIPTION=Local test relay for amb-mcp development
+      - ICON=
+      - TS_APIKEY=xyz
+      - TS_HOST=http://typesense:8108
+      - TS_COLLECTION=amb-mcp-test
+      - EMBED_ENDPOINT=https://embed.edufeed.org/embed
+      - EMBED_TOKEN=***REMOVED***
+      - SEMANTIC_SEARCH_ENABLED=true

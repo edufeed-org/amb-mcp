@@ -1,0 +1,130 @@
+import type { Filter } from 'nostr-tools';
+
+/**
+ * Parameters for searching AMB resources
+ */
+export interface SearchParams {
+  /** Free-text search query */
+  query?: string;
+  /** Filter by publisher name */
+  publisherName?: string;
+  /** Filter by creator name */
+  creatorName?: string;
+  /** Filter by subject/topic label */
+  subjectLabel?: string;
+  /** Filter by learning resource type label */
+  resourceTypeLabel?: string;
+  /** Filter by educational level label */
+  educationalLevelLabel?: string;
+  /** Language for label filters (default: 'de') */
+  language?: string;
+  /** Events created at or after this timestamp */
+  since?: number;
+  /** Events created at or before this timestamp */
+  until?: number;
+  /** Filter by author pubkeys */
+  authors?: string[];
+  /** Maximum number of results (1-250, default: 20) */
+  limit?: number;
+}
+
+export interface BuildFilterResult {
+  /** NIP-01 filter object */
+  filter: Filter;
+  /** NIP-50 search string (may be empty) */
+  search: string;
+}
+
+/**
+ * Build a Nostr filter and NIP-50 search string from search parameters.
+ *
+ * Field filters use the format: `field.path:value`
+ * Multiple values for the same field are OR'd together.
+ * Different fields are AND'd together.
+ *
+ * @see https://git.edufeed.org/edufeed/nostrlib/src/branch/main/eventstore/typesense30142/README.md
+ */
+export function buildFilter(params: SearchParams): BuildFilterResult {
+  const language = params.language || 'de';
+  const limit = Math.min(Math.max(params.limit ?? 20, 1), 250);
+
+  // Build NIP-01 filter
+  const filter: Filter = {
+    kinds: [30142],
+    limit,
+  };
+
+  if (params.since !== undefined) {
+    filter.since = params.since;
+  }
+  if (params.until !== undefined) {
+    filter.until = params.until;
+  }
+  if (params.authors?.length) {
+    filter.authors = params.authors;
+  }
+
+  // Build NIP-50 search string with field filters
+  const searchParts: string[] = [];
+
+  // Free-text query
+  if (params.query?.trim()) {
+    searchParts.push(params.query.trim());
+  }
+
+  // Field-specific filters
+  if (params.publisherName) {
+    searchParts.push(`publisher.name:${escapeSearchValue(params.publisherName)}`);
+  }
+  if (params.creatorName) {
+    searchParts.push(`creator.name:${escapeSearchValue(params.creatorName)}`);
+  }
+  if (params.subjectLabel) {
+    searchParts.push(
+      `about.prefLabel.${language}:${escapeSearchValue(params.subjectLabel)}`
+    );
+  }
+  if (params.resourceTypeLabel) {
+    searchParts.push(
+      `learningResourceType.prefLabel.${language}:${escapeSearchValue(params.resourceTypeLabel)}`
+    );
+  }
+  if (params.educationalLevelLabel) {
+    searchParts.push(
+      `educationalLevel.prefLabel.${language}:${escapeSearchValue(params.educationalLevelLabel)}`
+    );
+  }
+
+  return {
+    filter,
+    search: searchParts.join(' '),
+  };
+}
+
+/**
+ * Build a filter for fetching a single resource by identifier
+ */
+export function buildGetFilter(
+  identifier: string,
+  author?: string
+): Filter {
+  const filter: Filter = {
+    kinds: [30142],
+    '#d': [identifier],
+    limit: 1,
+  };
+  if (author) {
+    filter.authors = [author];
+  }
+  return filter;
+}
+
+/**
+ * Escape special characters in search values.
+ * Values with spaces should be quoted if needed by the search backend.
+ */
+function escapeSearchValue(value: string): string {
+  // If value contains spaces, it might need special handling
+  // For now, we pass through as-is since Typesense handles this
+  return value;
+}

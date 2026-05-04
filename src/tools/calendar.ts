@@ -1,0 +1,164 @@
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { AMBRelayClient } from '../relay/client.js';
+import { buildCalendarFilter } from '../calendar/filters.js';
+import { eventsToCalendarEvents } from '../calendar/transform.js';
+import { getCalendarAuthorDirectory } from '../authors.js';
+
+/**
+ * Register calendar event tools with the MCP server
+ */
+export function registerCalendarTools(
+  server: McpServer,
+  calendarClient: AMBRelayClient
+): void {
+  server.registerTool(
+    'search_calendar_events',
+    {
+      title: 'Search Calendar Events',
+      description:
+        'Search for NIP-52 calendar events (date-based and time-based). ' +
+        'Supports temporal filters (start/end time ranges), geohash location filtering, and hashtag filtering. ' +
+        'Returns events from the configured calendar relay.',
+      inputSchema: {
+        startAfter: z
+          .number()
+          .optional()
+          .describe(
+            'Only events starting after this Unix timestamp'
+          ),
+        startBefore: z
+          .number()
+          .optional()
+          .describe(
+            'Only events starting before this Unix timestamp'
+          ),
+        endAfter: z
+          .number()
+          .optional()
+          .describe(
+            'Only events ending after this Unix timestamp'
+          ),
+        endBefore: z
+          .number()
+          .optional()
+          .describe(
+            'Only events ending before this Unix timestamp'
+          ),
+        geohash: z
+          .string()
+          .optional()
+          .describe('Geohash prefix for location-based search'),
+        hashtags: z
+          .array(z.string())
+          .optional()
+          .describe('Filter by hashtags (e.g., ["meetup", "nostr"])'),
+        authors: z
+          .array(z.string())
+          .optional()
+          .describe('Filter by author pubkeys (hex format)'),
+        kinds: z
+          .array(z.number())
+          .optional()
+          .describe(
+            'Event kinds to query (default: [31922, 31923]). 31922 = date-based, 31923 = time-based.'
+          ),
+        since: z
+          .number()
+          .optional()
+          .describe('Return events created at or after this Unix timestamp'),
+        until: z
+          .number()
+          .optional()
+          .describe('Return events created at or before this Unix timestamp'),
+        limit: z
+          .number()
+          .min(1)
+          .max(250)
+          .optional()
+          .default(20)
+          .describe('Maximum number of results (1-250, default: 20)'),
+      },
+    },
+    async (params) => {
+      const filter = buildCalendarFilter({
+        startAfter: params.startAfter,
+        startBefore: params.startBefore,
+        endAfter: params.endAfter,
+        endBefore: params.endBefore,
+        geohash: params.geohash,
+        hashtags: params.hashtags,
+        authors: params.authors,
+        kinds: params.kinds,
+        since: params.since,
+        until: params.until,
+        limit: params.limit,
+      });
+
+      const events = await calendarClient.queryEvents(filter);
+      const calendarEvents = eventsToCalendarEvents(events);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              total: calendarEvents.length,
+              events: calendarEvents,
+            }),
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
+    'list_calendar_authors',
+    {
+      title: 'List Calendar Authors',
+      description:
+        'List known calendar event authors loaded from configured follow sets (NIP-51 kind 30000). ' +
+        'Returns author names, pubkeys, and NIP-05 identifiers. Use the returned pubkeys with ' +
+        'search_calendar_events(authors: [...]) to filter events by author.',
+      inputSchema: {},
+    },
+    async () => {
+      const directory = getCalendarAuthorDirectory();
+
+      if (!directory) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                error: 'not_configured',
+                message:
+                  'No calendar author sets configured. Set the CALENDAR_AUTHOR_SETS environment variable to a comma-separated list of naddr identifiers for kind 30000 follow sets.',
+              }),
+            },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              totalAuthors: directory.authors.length,
+              totalSets: directory.sets.length,
+              authors: directory.authors.map((a) => ({
+                pubkey: a.pubkey,
+                name: a.name,
+                nip05: a.nip05,
+                about: a.about,
+                sets: a.sets,
+              })),
+              sets: directory.sets,
+            }),
+          },
+        ],
+      };
+    }
+  );
+}

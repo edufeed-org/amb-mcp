@@ -20,6 +20,7 @@ import { registerSignerTools } from './signer.js';
 import { registerPublishTools } from './publish.js';
 import { registerAuthorTools } from './authors.js';
 import { registerCalendarTools } from './calendar.js';
+import { registerExtractTool } from './extract.js';
 
 /**
  * Register all MCP tools with the server
@@ -58,4 +59,7 @@ export function registerTools(
   if (calendarClient) {
     registerCalendarTools(server, calendarClient);
   }
+
+  // URL → form-prefill metadata extraction
+  registerExtractTool(server);
 }

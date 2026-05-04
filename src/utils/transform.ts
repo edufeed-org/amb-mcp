@@ -171,6 +171,8 @@ export function toSimplifiedResource(ambResource: AMBResourceWithMetadata, langu
 
   return {
     id: resource.id,
+    identifier: resource.id,
+    type: resource.type,
     name: resource.name,
     description: resource.description,
 
@@ -185,12 +187,12 @@ export function toSimplifiedResource(ambResource: AMBResourceWithMetadata, langu
       ?.map(s => resolveLabel(s.prefLabel, language) || s.id)
       .filter((v, i, a) => a.indexOf(v) === i),
 
-    // Authorship — just names
-    creator: resource.creator?.map(c => c.name),
-    publisher: resource.publisher?.map(p => p.name),
+    // Authorship — name + type pairs
+    creator: resource.creator?.map(c => ({ name: c.name, type: c.type })),
+    publisher: resource.publisher?.map(p => ({ name: p.name, type: p.type })),
 
     // Access
-    license: resource.license?.id,
+    license: resource.license ? { id: resource.license.id } : undefined,
     isAccessibleForFree: resource.isAccessibleForFree,
 
     // Language
@@ -214,6 +216,8 @@ export function toSimplifiedResource(ambResource: AMBResourceWithMetadata, langu
  */
 export interface SimplifiedAMBResource {
   id: string;
+  identifier: string;
+  type: string[];
   name: string;
   description?: string;
 
@@ -221,10 +225,10 @@ export interface SimplifiedAMBResource {
   educationalLevel?: string[];
   about?: string[];
 
-  creator?: string[];
-  publisher?: string[];
+  creator?: Array<{ name: string; type: string }>;
+  publisher?: Array<{ name: string; type: string }>;
 
-  license?: string;
+  license?: { id: string };
   isAccessibleForFree?: boolean;
 
   inLanguage?: string[];

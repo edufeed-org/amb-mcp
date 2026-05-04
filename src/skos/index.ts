@@ -34,5 +34,9 @@ export {
 // Cache
 export { vocabularyCache, SKOSCache } from './cache.js';
 
+// Nostr loader (NIP-VOCAB v0.2)
+export { loadVocabularyFromNaddr } from './nostr-loader.js';
+export type { NostrVocabLoaderOptions, RelayQuery } from './nostr-loader.js';
+
 // Builder
 export * from './builder/index.js';

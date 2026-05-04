@@ -5,21 +5,30 @@
 import type { ParsedVocabulary, RawSkohubVocabulary, SKOSConcept } from './types.js';
 import { parseVocabulary, searchConcepts, getLabel, type SearchField, DEFAULT_SEARCH_FIELDS } from './parser.js';
 import { vocabularyCache } from './cache.js';
+import { loadVocabularyFromNaddr, type NostrVocabLoaderOptions } from './nostr-loader.js';
 
 const FETCH_TIMEOUT = 10000; // 10 seconds
 
 /**
- * Fetch and parse a SKOS vocabulary from its URI
+ * Fetch and parse a SKOS vocabulary from its URI.
+ *
+ * Dispatches on URI shape:
+ *  - `naddr1…` → load from Nostr via NIP-VOCAB v0.2 (kinds 39737 / 39738)
+ *  - anything else → HTTP fetch (skohub-style JSON-LD)
  */
-export async function getVocabulary(uri: string): Promise<ParsedVocabulary> {
+export async function getVocabulary(
+  uri: string,
+  opts: NostrVocabLoaderOptions = {}
+): Promise<ParsedVocabulary> {
   // Check cache first
   const cached = vocabularyCache.get(uri);
   if (cached) {
     return cached;
   }
 
-  // Fetch from remote
-  const vocabulary = await fetchVocabulary(uri);
+  const vocabulary = uri.startsWith('naddr1')
+    ? await loadVocabularyFromNaddr(uri, opts)
+    : await fetchVocabulary(uri);
 
   // Cache the result
   vocabularyCache.set(uri, vocabulary);

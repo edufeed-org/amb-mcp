@@ -1,4 +1,5 @@
 import { getVocabulary, getLabel } from '../skos/index.js';
+import type { NostrVocabLoaderOptions } from '../skos/nostr-loader.js';
 
 /**
  * LLM-ready snapshot of a SKOS vocabulary.
@@ -25,14 +26,16 @@ export interface VocabSnapshot {
 
 export interface VocabSnapshotOptions {
   language?: string;
+  /** Forwarded to the Nostr loader when uri is an `naddr1…`. */
+  nostr?: NostrVocabLoaderOptions;
 }
 
 export async function vocabSnapshot(
   uri: string,
   options: VocabSnapshotOptions = {}
 ): Promise<VocabSnapshot> {
-  const { language = 'de' } = options;
-  const vocab = await getVocabulary(uri);
+  const { language = 'de', nostr } = options;
+  const vocab = await getVocabulary(uri, nostr);
 
   const concepts: VocabConcept[] = [];
   for (const concept of vocab.concepts.values()) {

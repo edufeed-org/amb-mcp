@@ -17,6 +17,8 @@ export type { VocabConcept, VocabSnapshot, VocabSnapshotOptions } from './vocabs
 export { llmEnrich, DEFAULT_MODEL } from './llm.js';
 export type { AnthropicLike, LlmEnrichInput, LlmEnrichResult, LlmPageInput } from './llm.js';
 
+export { createAnthropicClient } from './anthropic.js';
+
 export {
   formPayload,
   extractMetadataResult

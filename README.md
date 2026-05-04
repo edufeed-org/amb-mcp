@@ -11,6 +11,10 @@ An MCP (Model Context Protocol) server for querying educational resources from A
 - Get individual resources by identifier
 - Relay statistics and info
 
+### URL → Form-Prefill Metadata
+- `extract_metadata(url, variant, skosSchemes?)` — fetch a public web page and produce a complete AMB/EKW form-prefill payload. Returns OpenGraph fallback by default; with `ANTHROPIC_API_KEY` set, an LLM grounded in the configured SKOS vocabularies fills SKOS-typed fields with concept IDs and per-field evidence quotes.
+- Library export: `import { extractMetadata } from 'amb-mcp/lib'` for direct in-process use (e.g. SvelteKit server routes).
+
 ### Signing & Publishing
 - NIP-46 remote signing (bunker) with QR code connection flow
 - Sign and publish arbitrary Nostr events

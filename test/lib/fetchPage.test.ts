@@ -168,6 +168,51 @@ describe('fetchPage HTML parsing', () => {
   });
 });
 
+describe('fetchPage PDF handling', () => {
+  /** Build a fake fetch returning a fixed Uint8Array body as application/pdf. */
+  const fakePdf = (bytes: Uint8Array, status = 200) => async (_url: string | URL): Promise<Response> =>
+    new Response(bytes, { status, headers: { 'content-type': 'application/pdf' } });
+
+  it('routes PDFs through the injected pdfExtract and stuffs the text into readableText', async () => {
+    const fakeBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // "%PDF"
+    let receivedBytes: Uint8Array | undefined;
+    const pdfExtract = async (buf: ArrayBuffer) => {
+      receivedBytes = new Uint8Array(buf);
+      return 'Morgen bestimme ich. Ein Unterrichtsentwurf für die Klasse 5.';
+    };
+    const page = await fetchPage({
+      url: 'https://example.org/lesson.pdf',
+      fetchFn: fakePdf(fakeBytes),
+      pdfExtract
+    });
+    expect(page.contentType).toBe('pdf');
+    expect(page.readableText).toContain('Morgen bestimme ich');
+    expect(receivedBytes && Array.from(receivedBytes)).toEqual([0x25, 0x50, 0x44, 0x46]);
+  });
+
+  it('returns empty text without throwing when pdfExtract is not provided', async () => {
+    const page = await fetchPage({
+      url: 'https://example.org/lesson.pdf',
+      fetchFn: fakePdf(new Uint8Array([0x25, 0x50, 0x44, 0x46]))
+    });
+    expect(page.contentType).toBe('pdf');
+    expect(page.readableText).toBe('');
+  });
+
+  it('returns empty text when pdfExtract throws (graceful degradation)', async () => {
+    const pdfExtract = async () => {
+      throw new Error('parse error');
+    };
+    const page = await fetchPage({
+      url: 'https://example.org/lesson.pdf',
+      fetchFn: fakePdf(new Uint8Array([0x25, 0x50, 0x44, 0x46])),
+      pdfExtract
+    });
+    expect(page.contentType).toBe('pdf');
+    expect(page.readableText).toBe('');
+  });
+});
+
 describe('fetchPage non-200 responses', () => {
   it('throws on 4xx/5xx', async () => {
     const failing = async (_u: string | URL) =>

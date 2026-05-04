@@ -230,6 +230,215 @@ describe('extractMetadata — LLM-enriched path', () => {
   });
 });
 
+describe('extractMetadata — LLM output normalization', () => {
+  // Anthropic models, when handed a loose tool input_schema, sometimes
+  // serialize concept IDs as bare strings ("https://…/text") rather than
+  // {id: "…"} objects, and sometimes return evidence as a JSON-encoded
+  // string instead of a flat object. extractMetadata must accept both
+  // shapes so the downstream form prefill survives those drifts.
+
+  it('coerces bare-string concept IDs into {id} objects so vocab filter keeps them', async () => {
+    const html = `<html><head><title>x</title></head><body><p>y</p></body></html>`;
+    const llmClient = stubLlm(
+      // bare-string concept IDs (as observed from real Anthropic output)
+      { name: 'x', learningResourceType: ['https://w3id.org/kim/hcrt/text'] },
+      { name: 'n', learningResourceType: 'y' }
+    );
+
+    const result = await extractMetadata({
+      url: 'https://example.com/r',
+      variant: 'amb',
+      fetchFn: fakeHtml(html),
+      llmClient,
+      skosSchemes: { learningResourceType: LRT_URI }
+    });
+
+    expect(result.payload.learningResourceType).toEqual([
+      { id: 'https://w3id.org/kim/hcrt/text' }
+    ]);
+    expect(result.evidence.learningResourceType).toBe('y');
+  });
+
+  it('parses payload when the LLM returns it as a JSON-encoded string', async () => {
+    // Mirror of the evidence-as-string drift: Anthropic models sometimes
+    // serialize the entire `payload` tool argument as a JSON string. Without
+    // normalization, downstream `Object.entries(payload)` iterates the chars
+    // of the string, applyVariantSchema strips everything, payload comes out
+    // empty.
+    const html = `<html><head><title>x</title></head><body><p>y</p></body></html>`;
+    const llmClient = stubLlm(
+      // payload as a JSON string
+      JSON.stringify({
+        name: 'x',
+        learningResourceType: ['https://w3id.org/kim/hcrt/text']
+      }) as unknown as Record<string, unknown>,
+      { name: 'evidence-for-name', learningResourceType: 'evidence-for-lrt' }
+    );
+
+    const result = await extractMetadata({
+      url: 'https://example.com/r',
+      variant: 'amb',
+      fetchFn: fakeHtml(html),
+      llmClient,
+      skosSchemes: { learningResourceType: LRT_URI }
+    });
+
+    expect(result.payload.name).toBe('x');
+    expect(result.payload.learningResourceType).toEqual([
+      { id: 'https://w3id.org/kim/hcrt/text' }
+    ]);
+    expect(result.evidence.name).toBe('evidence-for-name');
+  });
+
+  it('repairs malformed JSON-encoded payloads with unescaped typographic quotes', async () => {
+    // Captured live from a German-language magazine PDF (rpi-konfi 1/2025):
+    // Anthropic returned the payload as a JSON-encoded string whose body
+    // contained a stray unescaped ASCII `"` after the German low-9 opener
+    // (`„gegen Einsamkeit"`) — the closing curly-quote `"` was a straight
+    // quote, prematurely terminating the JSON string. Strict JSON.parse
+    // rejects this; a repair fallback must keep the payload intact.
+    const html = `<html><head><title>x</title></head><body><p>y</p></body></html>`;
+    const broken =
+      '{\n  "name": "DU BIST NICHT ALLEIN ALLEIN – Ein Baustein „gegen Einsamkeit" im Rahmen der Kampagne",\n  "description": "Ein Baustein für die Konfi-Arbeit."\n}';
+    const llmClient = stubLlm(
+      broken as unknown as Record<string, unknown>,
+      { name: 'evidence-for-name' }
+    );
+
+    const result = await extractMetadata({
+      url: 'https://example.com/r',
+      variant: 'amb',
+      fetchFn: fakeHtml(html),
+      llmClient,
+      skosSchemes: {}
+    });
+
+    expect(result.payload.name).toBe(
+      'DU BIST NICHT ALLEIN ALLEIN – Ein Baustein „gegen Einsamkeit" im Rahmen der Kampagne'
+    );
+    expect(result.payload.description).toBe('Ein Baustein für die Konfi-Arbeit.');
+    expect(result.evidence.name).toBe('evidence-for-name');
+  });
+
+  it('parses evidence when the LLM returns it as a JSON-encoded string', async () => {
+    const html = `<html><head><title>x</title></head><body><p>y</p></body></html>`;
+    const llmClient = stubLlm(
+      { name: 'x' },
+      // evidence as a JSON string (as observed from real Anthropic output)
+      JSON.stringify({ name: 'evidence-for-name' }) as unknown as Record<string, string>
+    );
+
+    const result = await extractMetadata({
+      url: 'https://example.com/r',
+      variant: 'amb',
+      fetchFn: fakeHtml(html),
+      llmClient,
+      skosSchemes: {}
+    });
+
+    expect(result.evidence.name).toBe('evidence-for-name');
+  });
+});
+
+describe('extractMetadata — production LLM-output shape', () => {
+  // Replays the exact shape captured live from /api/enrich against the
+  // RPI Impulse PDF: bare-string concept IDs (HTTP-form for HCRT/EDU_LEVEL,
+  // NIP-VOCAB `kind:pubkey:dtag` form for the NIP-VOCAB schemes), plus
+  // evidence as a JSON-encoded string. The endpoint logged
+  //   result.source= llm-enriched payload keys= [] evidence keys= []
+  // so this test must currently fail.
+
+  const HCRT_URI = 'https://w3id.org/kim/hcrt/scheme';
+  const KLASSEN_URI = 'naddr-klassenstufen';
+  const SCHULART_URI = 'naddr-schulart';
+
+  const NIP_VOCAB_PUBKEY =
+    'd2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612';
+
+  const hcrtVocab: ParsedVocabulary = {
+    scheme: { id: HCRT_URI, type: 'ConceptScheme', title: { de: 'HCRT' }, hasTopConcept: [] },
+    concepts: new Map([
+      [
+        'https://w3id.org/kim/hcrt/worksheet',
+        { id: 'https://w3id.org/kim/hcrt/worksheet', type: 'Concept', prefLabel: { de: 'Arbeitsblatt' } }
+      ]
+    ])
+  };
+
+  const klassenVocab: ParsedVocabulary = {
+    scheme: { id: `39737:${NIP_VOCAB_PUBKEY}:klassenstufen`, type: 'ConceptScheme', title: { de: 'Klassenstufen' }, hasTopConcept: [] },
+    concepts: new Map([
+      [
+        `39738:${NIP_VOCAB_PUBKEY}:1`,
+        { id: `39738:${NIP_VOCAB_PUBKEY}:1`, type: 'Concept', prefLabel: { de: 'Jahrgang 1' } }
+      ],
+      [
+        `39738:${NIP_VOCAB_PUBKEY}:2`,
+        { id: `39738:${NIP_VOCAB_PUBKEY}:2`, type: 'Concept', prefLabel: { de: 'Jahrgang 2' } }
+      ]
+    ])
+  };
+
+  const schulartVocab: ParsedVocabulary = {
+    scheme: { id: `39737:${NIP_VOCAB_PUBKEY}:schulart`, type: 'ConceptScheme', title: { de: 'Schulart' }, hasTopConcept: [] },
+    concepts: new Map([
+      [
+        `39738:${NIP_VOCAB_PUBKEY}:grundschule`,
+        { id: `39738:${NIP_VOCAB_PUBKEY}:grundschule`, type: 'Concept', prefLabel: { de: 'Grundschule' } }
+      ]
+    ])
+  };
+
+  it('keeps both HTTP-form and NIP-VOCAB-form concept IDs after filter+schema', async () => {
+    vocabularyCache.set(HCRT_URI, hcrtVocab);
+    vocabularyCache.set(KLASSEN_URI, klassenVocab);
+    vocabularyCache.set(SCHULART_URI, schulartVocab);
+
+    const html = `<html><head><title>x</title></head><body><p>y</p></body></html>`;
+
+    // Bare-string IDs and JSON-encoded evidence — the production drift.
+    const llmClient = stubLlm(
+      {
+        learningResourceType: ['https://w3id.org/kim/hcrt/worksheet'],
+        gradeLevels: [`39738:${NIP_VOCAB_PUBKEY}:1`, `39738:${NIP_VOCAB_PUBKEY}:2`],
+        schoolTypes: [`39738:${NIP_VOCAB_PUBKEY}:grundschule`]
+      },
+      JSON.stringify({
+        learningResourceType: 'M4 Rollenspiel',
+        gradeLevels: 'Jahrgang 1 und 2',
+        schoolTypes: 'GRUNDSCHULE'
+      }) as unknown as Record<string, string>
+    );
+
+    const result = await extractMetadata({
+      url: 'https://example.com/r',
+      variant: 'ekw',
+      fetchFn: fakeHtml(html),
+      llmClient,
+      skosSchemes: {
+        learningResourceType: HCRT_URI,
+        gradeLevels: KLASSEN_URI,
+        schoolTypes: SCHULART_URI
+      }
+    });
+
+    expect(result.source).toBe('llm-enriched');
+    expect(result.payload.learningResourceType).toEqual([
+      { id: 'https://w3id.org/kim/hcrt/worksheet' }
+    ]);
+    expect(result.payload.gradeLevels).toEqual([
+      { id: `39738:${NIP_VOCAB_PUBKEY}:1` },
+      { id: `39738:${NIP_VOCAB_PUBKEY}:2` }
+    ]);
+    expect(result.payload.schoolTypes).toEqual([
+      { id: `39738:${NIP_VOCAB_PUBKEY}:grundschule` }
+    ]);
+    expect(result.evidence.learningResourceType).toBe('M4 Rollenspiel');
+    expect(result.evidence.gradeLevels).toBe('Jahrgang 1 und 2');
+    expect(result.evidence.schoolTypes).toBe('GRUNDSCHULE');
+  });
+});
+
 describe('extractMetadata — output shape', () => {
   it('passes extractMetadataResult zod validation in all three modes', async () => {
     const { extractMetadataResult } = await import('../../src/lib/schema.js');

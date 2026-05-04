@@ -26,6 +26,7 @@
     "applesauce-core": "^5.1.0",
     "applesauce-relay": "^5.1.0",
     "applesauce-signers": "^5.1.0",
+    "jsonrepair": "^3.14.0",
     "linkedom": "^0.18.12",
     "n3": "^2.0.1",
     "nostr-tools": "^2.10.0",

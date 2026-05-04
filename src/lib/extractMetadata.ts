@@ -1,3 +1,4 @@
+import { jsonrepair } from 'jsonrepair';
 import { fetchPage, type FetchPageResult } from './fetchPage.js';
 import { llmEnrich, type AnthropicLike } from './llm.js';
 import { vocabSnapshot, type VocabSnapshot } from './vocabs.js';
@@ -34,7 +35,17 @@ export interface ExtractMetadataInput {
    * Any field omitted here is sent to the LLM without grounding.
    */
   skosSchemes?: Record<string, string>;
+  /**
+   * Fallback Nostr relays for `naddr1…` SKOS schemes whose hint list is
+   * missing or unreachable. Ignored for HTTP/skohub URIs.
+   */
+  vocabRelays?: string[];
   fetchFn?: typeof fetch;
+  /**
+   * PDF → plain-text extractor. Forwarded to fetchPage. When omitted,
+   * PDF responses degrade to empty `readableText`.
+   */
+  pdfExtract?: (buffer: ArrayBuffer) => Promise<string>;
   llmClient?: AnthropicLike;
   llmModel?: string;
 }
@@ -60,13 +71,14 @@ function ogPayload(page: FetchPageResult): Record<string, unknown> {
  * caller has configured, keyed by form-field name.
  */
 async function loadVocabIds(
-  skosSchemes: Record<string, string>
+  skosSchemes: Record<string, string>,
+  vocabRelays: string[] | undefined
 ): Promise<Record<string, Set<string>>> {
   const out: Record<string, Set<string>> = {};
   await Promise.all(
     Object.entries(skosSchemes).map(async ([field, uri]) => {
       try {
-        const vocab = await getVocabulary(uri);
+        const vocab = await getVocabulary(uri, { fallbackRelays: vocabRelays });
         out[field] = new Set(vocab.concepts.keys());
       } catch {
         // Vocab unavailable → no validation for this field; LLM result
@@ -79,19 +91,104 @@ async function loadVocabIds(
 }
 
 async function loadVocabSnapshots(
-  skosSchemes: Record<string, string>
+  skosSchemes: Record<string, string>,
+  vocabRelays: string[] | undefined
 ): Promise<Record<string, VocabSnapshot>> {
   const snaps: Record<string, VocabSnapshot> = {};
   await Promise.all(
     Object.entries(skosSchemes).map(async ([field, uri]) => {
       try {
-        snaps[field] = await vocabSnapshot(uri);
+        snaps[field] = await vocabSnapshot(uri, {
+          nostr: { fallbackRelays: vocabRelays }
+        });
       } catch {
         // Skip — better to enrich without grounding than to fail entirely.
       }
     })
   );
   return snaps;
+}
+
+/**
+ * Coerce bare-string concept IDs (which Anthropic models sometimes emit
+ * when the tool input_schema doesn't pin down concept-array shape) into
+ * the `{id, prefLabel?}` objects the rest of the pipeline expects.
+ * Touches only fields that are SKOS-grounded (i.e. have a vocab snapshot).
+ */
+function normalizeConceptArrays(
+  payload: Record<string, unknown>,
+  vocabFields: Set<string>
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...payload };
+  for (const field of vocabFields) {
+    const value = out[field];
+    if (!Array.isArray(value)) continue;
+    out[field] = value.map((entry) =>
+      typeof entry === 'string' ? { id: entry } : entry
+    );
+  }
+  return out;
+}
+
+/**
+ * Try strict JSON.parse first; on failure run the input through `jsonrepair`,
+ * which fixes the malformed-output shapes Anthropic models occasionally emit
+ * — most commonly unescaped ASCII `"` inside German typographic-quote runs
+ * (`„…"…"`), which prematurely terminate the JSON string. Returns undefined
+ * if neither route yields a parseable object.
+ */
+function tryParseObject(text: string): Record<string, unknown> | undefined {
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // fall through to repair
+  }
+  try {
+    const repaired = jsonrepair(text);
+    const parsed = JSON.parse(repaired);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // give up
+  }
+  return undefined;
+}
+
+/**
+ * Anthropic models sometimes serialize the `payload` tool argument as a
+ * JSON-encoded string instead of a flat object. Without this, downstream
+ * `Object.entries(payload)` iterates the chars of the string and
+ * applyVariantSchema strips everything → empty payload. Accept both shapes,
+ * and run a JSON-repair fallback when the encoded string is malformed.
+ */
+function normalizePayload(value: unknown): Record<string, unknown> {
+  if (typeof value === 'string') {
+    return tryParseObject(value) ?? {};
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+/**
+ * Anthropic models sometimes serialize the `evidence` tool argument as a
+ * JSON-encoded string instead of a flat object. Accept both shapes (with the
+ * same JSON-repair fallback) so the "Smart fill ✨" badges still get their
+ * quotes downstream.
+ */
+function normalizeEvidence(value: unknown): Record<string, string> {
+  if (typeof value === 'string') {
+    return (tryParseObject(value) as Record<string, string> | undefined) ?? {};
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, string>;
+  }
+  return {};
 }
 
 /**
@@ -146,9 +243,9 @@ function applyVariantSchema(
 export async function extractMetadata(
   input: ExtractMetadataInput
 ): Promise<ExtractMetadataResult> {
-  const { url, variant, skosSchemes = {}, fetchFn, llmClient, llmModel } = input;
+  const { url, variant, skosSchemes = {}, vocabRelays, fetchFn, pdfExtract, llmClient, llmModel } = input;
 
-  const page = await fetchPage({ url, fetchFn });
+  const page = await fetchPage({ url, fetchFn, pdfExtract });
   const baseline = {
     og: Object.keys(page.ogTags).length > 0 ? page.ogTags : undefined,
     amb: page.ambJsonLd as Record<string, unknown> | undefined
@@ -176,8 +273,8 @@ export async function extractMetadata(
 
   // 2. LLM-enriched path
   const [snapshots, vocabIds] = await Promise.all([
-    loadVocabSnapshots(skosSchemes),
-    loadVocabIds(skosSchemes)
+    loadVocabSnapshots(skosSchemes, vocabRelays),
+    loadVocabIds(skosSchemes, vocabRelays)
   ]);
 
   const llmRes = await llmEnrich({
@@ -194,12 +291,21 @@ export async function extractMetadata(
     ...(llmModel ? { model: llmModel } : {})
   });
 
-  const filtered = filterByVocab(llmRes.payload, vocabIds);
-  const variantSafe = applyVariantSchema(filtered, variant);
+  const vocabFields = new Set(Object.keys(vocabIds));
+  const payloadObject = normalizePayload(llmRes.payload);
+  const normalizedPayload = normalizeConceptArrays(payloadObject, vocabFields);
+  const normalizedEvidence = normalizeEvidence(llmRes.evidence);
+
+  const filtered = filterByVocab(normalizedPayload, vocabIds);
+  // Layer OG fallbacks beneath the LLM output so the four cheap-to-derive
+  // fields (name/description/image/inLanguage) still prefill when the
+  // LLM is conservative. LLM output wins on conflict.
+  const merged = { ...ogPayload(page), ...filtered };
+  const variantSafe = applyVariantSchema(merged, variant);
 
   // Keep evidence only for fields that survived filtering.
   const evidence: Record<string, string> = {};
-  for (const [k, quote] of Object.entries(llmRes.evidence)) {
+  for (const [k, quote] of Object.entries(normalizedEvidence)) {
     if (k in variantSafe && typeof quote === 'string') evidence[k] = quote;
   }
 

@@ -55,6 +55,34 @@ export interface LlmEnrichResult {
   evidence: Record<string, string>;
 }
 
+// Concept-array shape — used by every SKOS-grounded form field.
+// Each entry must carry an `id`; `prefLabel` is an optional hint.
+const conceptArray = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      prefLabel: { type: 'string' }
+    },
+    required: ['id']
+  }
+} as const;
+
+// Person-or-Organization shape — used for `creators` / `publisher`.
+const personOrOrgArray = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      type: { type: 'string', enum: ['Person', 'Organization'] },
+      id: { type: 'string' }
+    },
+    required: ['name']
+  }
+} as const;
+
 const SUBMIT_TOOL = {
   name: 'submit_form_payload',
   description: 'Submit the AMB/EKW form-prefill payload extracted from the page.',
@@ -64,7 +92,33 @@ const SUBMIT_TOOL = {
       payload: {
         type: 'object',
         description:
-          'Form-field values to prefill. Use concept IDs from the provided vocabularies. Only fill fields with strong evidence in the page text.'
+          'Form-field values to prefill. Use concept IDs from the provided vocabularies. Only fill fields with strong evidence in the page text. Omit fields you cannot fill — do not emit empty strings or empty arrays.',
+        properties: {
+          // AMB simple text fields
+          name: { type: 'string' },
+          description: { type: 'string' },
+          inLanguage: { type: 'string' },
+          image: { type: 'string' },
+          license: { type: 'string' },
+          datePublished: { type: 'string' },
+          isAccessibleForFree: { type: 'boolean' },
+          // AMB array fields
+          keywords: { type: 'array', items: { type: 'string' } },
+          creators: personOrOrgArray,
+          publisher: personOrOrgArray,
+          // AMB SKOS concept arrays
+          learningResourceType: conceptArray,
+          educationalLevels: conceptArray,
+          about: conceptArray,
+          // EKW extension fields
+          ekwFachrichtung: conceptArray,
+          gradeLevels: conceptArray,
+          schoolTypes: conceptArray,
+          didacticConcepts: conceptArray,
+          methods: conceptArray,
+          methodOther: { type: 'string' },
+          bibleReferences: { type: 'array', items: { type: 'string' } }
+        }
       },
       evidence: {
         type: 'object',
@@ -83,7 +137,40 @@ function systemPrompt(variant: Variant): string {
     'submit_form_payload tool exactly once. For each form field you fill,',
     'pick concept IDs verbatim from the vocabs. Only fill a field if the page',
     'gives strong evidence; leave others empty. For every filled field,',
-    'include a sibling key in `evidence` quoting the supporting page phrase.'
+    'include a sibling key in `evidence` quoting the supporting page phrase.',
+    '',
+    'Always attempt to fill the simple text fields when the page provides them:',
+    '`name` (resource title — derive from the page title, JSON-LD `name`/`headline`,',
+    '  the largest heading, or the document\'s opening lines for a PDF),',
+    '`description` (a 1–3 sentence summary — derive from JSON-LD `description`,',
+    '  the page\'s meta description, or a synthesis of the opening paragraphs),',
+    '`creators` (authors / publishers / responsible institutions — derive from',
+    '  bylines, JSON-LD `author`/`publisher`, imprint/Impressum, or the document',
+    '  cover page),',
+    '`license` (a license URL — when the page or PDF mentions a Creative Commons',
+    '  license, a CC-license badge, or text like "CC BY-SA 4.0", "CC BY-NC-SA 4.0",',
+    '  "CC0", "lizenziert unter …", emit the canonical URL form.',
+    '  RULE 1: if the source text already contains a `creativecommons.org/...` URL,',
+    '  copy it VERBATIM — do not change the version or locale segment. e.g. if the',
+    '  source has `https://creativecommons.org/licenses/by-nc-sa/3.0/de/`, emit',
+    '  exactly that, NOT the 4.0 international URL.',
+    '  RULE 2: otherwise build the URL from the modifiers and version stated in',
+    '  the source. Map ALL six CC variants exactly — do not collapse NC/ND/SA:',
+    '    CC BY {v}          → https://creativecommons.org/licenses/by/{v}/',
+    '    CC BY-SA {v}       → https://creativecommons.org/licenses/by-sa/{v}/',
+    '    CC BY-NC {v}       → https://creativecommons.org/licenses/by-nc/{v}/',
+    '    CC BY-NC-SA {v}    → https://creativecommons.org/licenses/by-nc-sa/{v}/',
+    '    CC BY-ND {v}       → https://creativecommons.org/licenses/by-nd/{v}/',
+    '    CC BY-NC-ND {v}    → https://creativecommons.org/licenses/by-nc-nd/{v}/',
+    '    CC0 1.0            → https://creativecommons.org/publicdomain/zero/1.0/',
+    '  Use the version `{v}` actually written in the source (3.0, 4.0, …). Do',
+    '  NOT default to 4.0 unless the source says 4.0 or omits the version.',
+    '  Read the suffix carefully — "BY-NC-SA" is NOT "BY-SA", and "BY-NC" is NOT',
+    '  "BY". Reproduce every modifier present in the source text. PDFs often',
+    '  state the license on the cover page, in the imprint/Impressum, or',
+    '  alongside copyright notices). For PDFs without OpenGraph tags, you must',
+    '  still synthesize these fields from the readable text. Do not leave them',
+    '  empty just because no OG metadata is present.'
   ].join(' ');
 }
 

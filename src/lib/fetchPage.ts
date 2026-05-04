@@ -21,6 +21,13 @@ export interface FetchPageInput {
   maxBytes?: number;
   /** Hard cap on fetch wall-clock time, default 10s. */
   timeoutMs?: number;
+  /**
+   * PDF → plain-text extractor. Called when the response is
+   * `application/pdf`. Injected so the loader stays runtime-agnostic
+   * (Node, browser, edge) and tests can stub it. Throws and missing
+   * extractors both degrade gracefully to empty text.
+   */
+  pdfExtract?: (buffer: ArrayBuffer) => Promise<string>;
 }
 
 export interface FetchPageResult {
@@ -147,7 +154,7 @@ function extractReadableText(html: string, url: string): string {
 }
 
 export async function fetchPage(input: FetchPageInput): Promise<FetchPageResult> {
-  const { url, fetchFn = fetch, maxBytes = DEFAULT_MAX_BYTES, timeoutMs = DEFAULT_TIMEOUT_MS } = input;
+  const { url, fetchFn = fetch, maxBytes = DEFAULT_MAX_BYTES, timeoutMs = DEFAULT_TIMEOUT_MS, pdfExtract } = input;
   const parsed = guard(url);
 
   const controller = new AbortController();
@@ -173,14 +180,25 @@ export async function fetchPage(input: FetchPageInput): Promise<FetchPageResult>
   const isPdf = contentTypeHeader.includes('application/pdf');
 
   if (isPdf) {
-    // PDF text extraction lives downstream — for now expose the contentType
-    // so the LLM step can decide what to do (or fall back to OG-only).
+    let readableText = '';
+    if (pdfExtract) {
+      try {
+        const buffer = await response.arrayBuffer();
+        if (buffer.byteLength > maxBytes) {
+          throw new Error('Response body exceeds size cap');
+        }
+        readableText = await pdfExtract(buffer);
+      } catch {
+        // Graceful: leave readableText empty so downstream falls back to
+        // OG/baseline rather than failing the whole enrichment.
+      }
+    }
     return {
       url: parsed.toString(),
       contentType: 'pdf',
       ogTags: {},
       jsonLd: [],
-      readableText: ''
+      readableText
     };
   }
 

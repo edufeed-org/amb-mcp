@@ -118,6 +118,61 @@ describe('llmEnrich', () => {
     expect(systemText).toMatch(/ekw/i);
   });
 
+  it('declares the AMB + EKW form fields as explicit payload properties', async () => {
+    // Without per-field properties Anthropic models sometimes serialize the
+    // entire `payload` arg as a JSON-encoded string, and those strings can
+    // contain unescaped typographic quotes that break JSON.parse downstream
+    // (observed on real magazine PDFs with German „…" quotes). A concrete
+    // schema makes the model emit a structured object instead.
+    const { client, calls } = stubClient({ payload: {}, evidence: {} });
+    await llmEnrich({
+      client,
+      variant: 'ekw',
+      page: { ogTags: {}, readableText: 'x' },
+      vocabs: {}
+    });
+    const params = calls[0] as {
+      tools: Array<{
+        name: string;
+        input_schema: {
+          properties: {
+            payload: {
+              type?: string;
+              properties?: Record<string, { type?: string }>;
+            };
+          };
+        };
+      }>;
+    };
+    const tool = params.tools.find((t) => t.name === 'submit_form_payload');
+    expect(tool).toBeDefined();
+    const payloadSchema = tool!.input_schema.properties.payload;
+    expect(payloadSchema.type).toBe('object');
+    const props = payloadSchema.properties ?? {};
+
+    // AMB simple text fields
+    expect(props.name?.type).toBe('string');
+    expect(props.description?.type).toBe('string');
+    expect(props.inLanguage?.type).toBe('string');
+    expect(props.image?.type).toBe('string');
+    expect(props.license?.type).toBe('string');
+    // AMB array fields
+    expect(props.keywords?.type).toBe('array');
+    expect(props.creators?.type).toBe('array');
+    expect(props.publisher?.type).toBe('array');
+    // AMB SKOS concept arrays
+    expect(props.learningResourceType?.type).toBe('array');
+    expect(props.educationalLevels?.type).toBe('array');
+    // EKW extension fields
+    expect(props.ekwFachrichtung?.type).toBe('array');
+    expect(props.gradeLevels?.type).toBe('array');
+    expect(props.schoolTypes?.type).toBe('array');
+    expect(props.didacticConcepts?.type).toBe('array');
+    expect(props.methods?.type).toBe('array');
+    expect(props.methodOther?.type).toBe('string');
+    expect(props.bibleReferences?.type).toBe('array');
+  });
+
   it('throws when the model returns no tool_use block', async () => {
     const client: AnthropicLike = {
       messages: {

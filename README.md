@@ -37,17 +37,26 @@ Copy `.env.example` to `.env` and configure:
 cp .env.example .env
 ```
 
-Environment variables:
-- `AMB_RELAY_URL` - AMB relay WebSocket URL (default: `wss://relay.edufeed.org`)
-- `SERVER_PRIVATE_KEY` - Nostr private key (hex) for ContextVM transport
-- `RELAYS` - Comma-separated ContextVM relay URLs
+### Environment variables
+
+| Name | Used by | Default | Description |
+|------|---------|---------|-------------|
+| `AMB_RELAYS` | both transports | `wss://relay.edufeed.org` | Comma-separated AMB relay URLs queried by `search_resources`/`get_resource` and used as default publish targets. |
+| `AMB_AUTHOR_SETS` | both transports | _(empty)_ | Comma-separated `naddr` follow-set identifiers used to scope queries by author. |
+| `CALENDAR_RELAYS` | both transports | `wss://dev.calendar-relay.edufeed.org` | Comma-separated NIP-52 calendar relay URLs. |
+| `CALENDAR_AUTHOR_SETS` | both transports | _(empty)_ | Comma-separated `naddr` follow-set identifiers for calendar event queries. |
+| `SERVER_PRIVATE_KEY` | `src/index.ts` only | **required** | Nostr private key (`nsec` or hex) the server uses for its own ContextVM identity. The pubkey derived from this is what clients connect to via `cvmi use <pubkey>`. Not needed for stdio transport. |
+| `RELAYS` | `src/index.ts` only | `wss://relay.contextvm.org`, `wss://cvm.otherstuff.ai` | Comma-separated relay URLs for ContextVM transport announcements and request/response traffic. Not needed for stdio transport. |
+| `ANTHROPIC_API_KEY` | `extract_metadata` | _(unset)_ | Enables LLM-grounded SKOS field extraction. When unset the tool degrades to OpenGraph/JSON-LD only. |
+| `ANTHROPIC_MODEL` | `extract_metadata` | `claude-sonnet-4-6` | Override the default Anthropic model. |
+| `SKOS_SCHEMES` | `extract_metadata` | _(unset)_ | JSON map `{ "<form-field>": "<scheme-uri>" }` of default vocabularies used when the caller does not pass `skosSchemes` explicitly. |
 
 ## Usage
 
 ### Option 1: Add to Claude Code (Recommended)
 
 ```bash
-claude mcp add amb-relay -e AMB_RELAY_URL=ws://localhost:3334 -- bun run /path/to/amb-mcp/src/stdio.ts
+claude mcp add amb-relay -e AMB_RELAYS=ws://localhost:3334 -- bun run /path/to/amb-mcp/src/stdio.ts
 ```
 
 ### Option 2: Run with cvmi (ContextVM)
@@ -294,6 +303,48 @@ Returns:
 | `amb://vocabularies/resource-types` | Learning resource types vocabulary |
 | `amb://vocabularies/educational-levels` | Educational levels vocabulary |
 | `amb://relay-info` | NIP-11 relay information |
+
+## Deployment
+
+The server runs over Nostr transport (`src/index.ts`) — there is no HTTP listener and no port to expose. Clients reach it by addressing its pubkey on the configured ContextVM `RELAYS`.
+
+### Prerequisites on the host
+
+- Node ≥ 20 (or Bun ≥ 1.1) for runtime.
+- Outbound WebSocket access to the configured AMB and ContextVM relays.
+- Outbound HTTPS for the `extract_metadata` tool (target pages and, optionally, the Anthropic API).
+- A sibling checkout of [`amb-nostr-converter`](../amb-nostr-converter) at `../amb-nostr-converter`. `package.json` references it via `file:../amb-nostr-converter`, so `bun install` / `npm install` will fail without it. If you do not have a sibling layout, vendor it into the repo or replace the dep with a published version before deploying.
+
+### Build & run
+
+```bash
+bun install              # or: npm install
+bun run build            # tsc -> dist/
+node dist/index.js       # production entry; uses Nostr transport
+```
+
+For development without a build step: `bun run src/index.ts`.
+
+### Identity & secrets
+
+- `SERVER_PRIVATE_KEY` is the server's persistent Nostr identity. **Losing or rotating it changes the pubkey clients use to address the server**, so treat it as long-lived state. Mint one with `nak key generate` (or any Nostr keygen) and store it via your secret manager — never commit it.
+- The matching pubkey is what users pass to `cvmi use <pubkey>`. Print it once after first start so operators can record it.
+- `ANTHROPIC_API_KEY`, if used, should be scoped to this service; the `extract_metadata` tool will spend tokens on every call where SKOS grounding is requested.
+
+### State & persistence
+
+The server itself is stateless on disk — all state lives on the configured relays. The only thing that needs to persist across restarts is the env file containing `SERVER_PRIVATE_KEY`. No volume is required for the MCP container.
+
+### Discovery
+
+On startup with Nostr transport, the server publishes a ContextVM announcement to `RELAYS`. To remove an old announcement (e.g. after rotating the key or decommissioning), use `scripts/unpublish-server.ts`.
+
+### Operational notes
+
+- **Logging:** plain stdout/stderr. Capture via your process supervisor (systemd journal, Docker logs, etc.).
+- **Healthcheck:** there is no HTTP healthcheck. Liveness ≈ "process is up and the relay subscription has not errored"; integrate at the supervisor level.
+- **`extract_metadata` egress:** the tool fetches arbitrary URLs supplied by callers. Fetching is SSRF-aware (private/loopback ranges blocked) but you should still consider running it behind an egress proxy if your homelab restricts outbound traffic.
+- **Resource footprint:** small — a single Node process with a handful of WebSocket connections. No database, no cache directory.
 
 ## Development
 

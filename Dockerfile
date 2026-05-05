@@ -16,4 +16,8 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package.json ./package.json
 USER node
+# HTTP transport listens on 3000 when started with `node dist/http.js`.
+# Default CMD remains the Nostr/ContextVM transport for backward compatibility;
+# override CMD (or run a sibling service) to expose HTTP.
+EXPOSE 3000
 CMD ["node", "dist/index.js"]

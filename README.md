@@ -77,6 +77,55 @@ cvmi use <server-pubkey>
 bun run src/index.ts
 ```
 
+### Option 4: Run with Streamable HTTP transport
+
+For web-based MCP clients (Claude.ai connectors, MCP Inspector, custom browser apps):
+
+```bash
+HTTP_BEARER_TOKEN=secret bun run src/http.ts   # dev
+node dist/http.js                              # production (after `npm run build`)
+```
+
+| Variable | Default | Description |
+|---|---|---|
+| `HTTP_PORT` | `3000` | Port to bind. |
+| `HTTP_HOST` | `0.0.0.0` | Bind host. Use `127.0.0.1` to limit to a local proxy. |
+| `HTTP_BEARER_TOKEN` | _(unset)_ | If set, every `/mcp` request must carry `Authorization: Bearer <token>`. Unset means open. |
+| `HTTP_ALLOWED_HOSTS` | _(unset)_ | Comma-separated Host allow-list. Enables DNS-rebinding protection when set. |
+| `HTTP_ALLOWED_ORIGINS` | _(unset)_ | Comma-separated Origin allow-list. |
+
+The server exposes:
+
+- `POST /mcp` — JSON-RPC requests (initialize, tool calls, etc.)
+- `GET /mcp` — server-push SSE stream for the current session
+- `DELETE /mcp` — terminate the current session
+- `GET /healthz` — unauthenticated liveness probe
+
+Example handshake with `curl`:
+
+```bash
+# 1. initialize, capture the Mcp-Session-Id response header
+curl -i http://localhost:3000/mcp -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H "Authorization: Bearer $HTTP_BEARER_TOKEN" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+
+# 2. reuse the session id for tools/list, tools/call, etc.
+curl http://localhost:3000/mcp -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H "Authorization: Bearer $HTTP_BEARER_TOKEN" \
+  -H 'Mcp-Session-Id: <id-from-step-1>' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+```
+
+Smoke-test with [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
+
+```bash
+npx @modelcontextprotocol/inspector http://localhost:3000/mcp
+```
+
 ## Available Tools
 
 ### search_resources
@@ -306,7 +355,11 @@ Returns:
 
 ## Deployment
 
-The server runs over Nostr transport (`src/index.ts`) — there is no HTTP listener and no port to expose. Clients reach it by addressing its pubkey on the configured ContextVM `RELAYS`.
+The server has three entry points; pick the one that matches your client:
+
+- **`src/index.ts`** (default `CMD`) — Nostr/ContextVM transport. No HTTP port. Clients reach it by addressing its pubkey on the configured ContextVM `RELAYS`. Requires `SERVER_PRIVATE_KEY`.
+- **`src/stdio.ts`** — stdio transport for `cvmi serve` and Claude Code as a local subprocess.
+- **`src/http.ts`** — Streamable HTTP transport on `HTTP_PORT` (default `3000`). Use for web-based MCP clients. See [Option 4](#option-4-run-with-streamable-http-transport) above for env vars and the handshake.
 
 ### Prerequisites on the host
 
@@ -342,7 +395,7 @@ On startup with Nostr transport, the server publishes a ContextVM announcement t
 ### Operational notes
 
 - **Logging:** plain stdout/stderr. Capture via your process supervisor (systemd journal, Docker logs, etc.).
-- **Healthcheck:** there is no HTTP healthcheck. Liveness ≈ "process is up and the relay subscription has not errored"; integrate at the supervisor level.
+- **Healthcheck:** the Nostr and stdio entry points have no HTTP healthcheck — liveness ≈ "process is up and the relay subscription has not errored", integrate at the supervisor level. The HTTP entry point exposes `GET /healthz` (unauthenticated) for probes.
 - **`extract_metadata` egress:** the tool fetches arbitrary URLs supplied by callers. Fetching is SSRF-aware (private/loopback ranges blocked) but you should still consider running it behind an egress proxy if your homelab restricts outbound traffic.
 - **Resource footprint:** small — a single Node process with a handful of WebSocket connections. No database, no cache directory.
 
@@ -378,6 +431,9 @@ AMB_RELAY_URL=ws://localhost:3334 bun run test-client.ts
 src/
 ├── index.ts          # Nostr transport entry point
 ├── stdio.ts          # Stdio transport entry point (for cvmi/Claude Code)
+├── http.ts           # Streamable HTTP transport entry point
+├── transport/
+│   └── http.ts       # Express app + StreamableHTTPServerTransport wiring
 ├── relay/
 │   ├── client.ts     # AMB relay client (SimplePool wrapper)
 │   └── filters.ts    # NIP-50 search string builder

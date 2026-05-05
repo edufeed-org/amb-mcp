@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.github
+.forgejo
+*.log
+.env
+.env.*
+typesense-data
+test
+docker-compose.yml
+README.md

@@ -1,0 +1,41 @@
+name: build-image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  REGISTRY: git.edufeed.org
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: docker-builder
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Forgejo registry
+        run: echo "${{ secrets.REGISTRY_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Build and push
+        run: |
+          set -eu
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          IMAGE="${REGISTRY}/${IMAGE_NAME}"
+
+          TAGS="--tag ${IMAGE}:sha-${SHORT_SHA}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAGS="${TAGS} --tag ${IMAGE}:${GITHUB_REF_NAME}"
+          elif [ "${GITHUB_REF_NAME}" = "main" ]; then
+            TAGS="${TAGS} --tag ${IMAGE}:main --tag ${IMAGE}:latest"
+          fi
+
+          docker buildx build \
+            --push \
+            ${TAGS} \
+            --cache-from type=registry,ref=${IMAGE}:buildcache \
+            --cache-to type=registry,ref=${IMAGE}:buildcache,mode=max \
+            .

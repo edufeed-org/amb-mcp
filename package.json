@@ -22,7 +22,7 @@
     "@contextvm/sdk": "^0.3.2",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@mozilla/readability": "^0.6.0",
-    "amb-nostr-converter": "file:../amb-nostr-converter",
+    "amb-nostr-converter": "https://git.edufeed.org/api/packages/edufeed/npm/amb-nostr-converter/-/0.0.0-d216541/amb-nostr-converter-0.0.0-d216541.tgz",
     "applesauce-core": "^5.1.0",
     "applesauce-relay": "^5.1.0",
     "applesauce-signers": "^5.1.0",

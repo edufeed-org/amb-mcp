@@ -126,6 +126,16 @@ Smoke-test with [MCP Inspector](https://github.com/modelcontextprotocol/inspecto
 npx @modelcontextprotocol/inspector http://localhost:3000/mcp
 ```
 
+#### Public deployment
+
+A managed instance is hosted at:
+
+```
+https://mcp.amb.edufeed.org/mcp
+```
+
+It speaks the same streamable-HTTP protocol as the local server, requires `Authorization: Bearer <token>` on every `/mcp` request, and exposes the full tool surface (including `extract_metadata`). Tokens are issued out-of-band — ask the operator. The handshake is identical to the curl example above; just substitute the URL.
+
 ## Available Tools
 
 ### search_resources

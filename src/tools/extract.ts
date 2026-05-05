@@ -3,6 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { extractMetadata } from '../lib/extractMetadata.js';
 import type { AnthropicLike } from '../lib/llm.js';
+import { extractPdfText } from '../lib/pdfExtractor.js';
 
 /**
  * `extract_metadata` MCP tool.
@@ -64,6 +65,7 @@ export function registerExtractTool(server: McpServer): void {
         variant: params.variant ?? 'amb',
         skosSchemes: params.skosSchemes ?? defaultSchemesFromEnv(),
         llmClient,
+        pdfExtract: extractPdfText,
         ...(process.env.ANTHROPIC_MODEL ? { llmModel: process.env.ANTHROPIC_MODEL } : {})
       });
 

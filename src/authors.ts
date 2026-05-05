@@ -9,6 +9,14 @@ import { nip19, SimplePool, type NostrEvent } from 'nostr-tools';
 import type { AddressPointer, ProfilePointer } from 'nostr-tools/nip19';
 import { getProfileContent } from 'applesauce-core/helpers';
 import { getProfilePointerFromPTag } from 'applesauce-core/helpers';
+import WebSocket from 'ws';
+
+// See src/relay/client.ts for the rationale — Node 20 has no global WebSocket
+// and SimplePool from nostr-tools root cannot be polyfilled via
+// useWebSocketImplementation. Pass the impl explicitly per construction.
+const WS_IMPL: typeof globalThis.WebSocket =
+  (globalThis as { WebSocket?: typeof globalThis.WebSocket }).WebSocket ??
+  (WebSocket as unknown as typeof globalThis.WebSocket);
 
 // ============ Types ============
 
@@ -173,7 +181,11 @@ export async function loadAuthorSets(
     return { authors: [], sets: [] };
   }
 
-  const pool = new SimplePool();
+  // See src/relay/client.ts — SimplePool's runtime accepts
+  // `websocketImplementation`, the TS surface just doesn't expose it.
+  const pool = new SimplePool({
+    websocketImplementation: WS_IMPL,
+  } as ConstructorParameters<typeof SimplePool>[0]);
 
   try {
     // Collect all relay hints + default relays for fetching follow sets

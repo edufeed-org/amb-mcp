@@ -1,4 +1,14 @@
 import { SimplePool, type Filter, type NostrEvent } from 'nostr-tools';
+import WebSocket from 'ws';
+
+// Node 20 (the production runtime image) has no global WebSocket.
+// SimplePool from `nostr-tools` root reads its websocketImplementation from a
+// module-local variable that's only seeded from globalThis.WebSocket at load
+// time, and `nostr-tools/relay`'s `useWebSocketImplementation` does NOT reach
+// it. The reliable fix is to pass the impl explicitly per construction.
+const WS_IMPL: typeof globalThis.WebSocket =
+  (globalThis as { WebSocket?: typeof globalThis.WebSocket }).WebSocket ??
+  (WebSocket as unknown as typeof globalThis.WebSocket);
 
 export interface RelayInfo {
   name: string;
@@ -30,7 +40,13 @@ export class AMBRelayClient {
   private relayUrls: Set<string>;
 
   constructor(relayUrls: string | string[]) {
-    this.pool = new SimplePool();
+    // The SimplePool TS signature only declares `enablePing|enableReconnect`,
+    // but its runtime constructor spreads `...options` straight into
+    // AbstractSimplePool, which honors `websocketImplementation`. Cast to skip
+    // the over-tight surface type — verified at runtime against Node 20.
+    this.pool = new SimplePool({
+      websocketImplementation: WS_IMPL,
+    } as ConstructorParameters<typeof SimplePool>[0]);
     this.relayUrls = new Set(
       Array.isArray(relayUrls) ? relayUrls : [relayUrls]
     );

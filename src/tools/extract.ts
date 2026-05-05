@@ -60,12 +60,22 @@ export function registerExtractTool(server: McpServer): void {
         ? (new Anthropic({ apiKey }) as unknown as AnthropicLike)
         : undefined;
 
+      // VOCAB_RELAYS is the fallback relay list for naddr1 SKOS schemes
+      // whose hint relays are missing or unreachable (e.g. the
+      // educational-level naddr ships with no hints). Falls back to
+      // AMB_RELAYS so a single env var typically suffices.
+      const vocabRelays = (process.env.VOCAB_RELAYS ?? process.env.AMB_RELAYS)
+        ?.split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
       const result = await extractMetadata({
         url: params.url,
         variant: params.variant ?? 'amb',
         skosSchemes: params.skosSchemes ?? defaultSchemesFromEnv(),
         llmClient,
         pdfExtract: extractPdfText,
+        ...(vocabRelays && vocabRelays.length > 0 ? { vocabRelays } : {}),
         ...(process.env.ANTHROPIC_MODEL ? { llmModel: process.env.ANTHROPIC_MODEL } : {})
       });
 

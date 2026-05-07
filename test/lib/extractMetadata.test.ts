@@ -140,7 +140,7 @@ describe('extractMetadata — LLM-enriched path', () => {
     expect(result.source).toBe('llm-enriched');
     expect(result.payload.name).toBe('Reading lesson');
     expect(result.payload.learningResourceType).toEqual([
-      { id: 'https://w3id.org/kim/hcrt/text' }
+      { id: 'https://w3id.org/kim/hcrt/text', prefLabel: 'Text' }
     ]);
     expect(llmClient.messages.create).toHaveBeenCalledOnce();
   });
@@ -168,7 +168,7 @@ describe('extractMetadata — LLM-enriched path', () => {
     });
 
     expect(result.payload.learningResourceType).toEqual([
-      { id: 'https://w3id.org/kim/hcrt/text' }
+      { id: 'https://w3id.org/kim/hcrt/text', prefLabel: 'Text' }
     ]);
   });
 
@@ -254,7 +254,7 @@ describe('extractMetadata — LLM output normalization', () => {
     });
 
     expect(result.payload.learningResourceType).toEqual([
-      { id: 'https://w3id.org/kim/hcrt/text' }
+      { id: 'https://w3id.org/kim/hcrt/text', prefLabel: 'Text' }
     ]);
     expect(result.evidence.learningResourceType).toBe('y');
   });
@@ -285,7 +285,7 @@ describe('extractMetadata — LLM output normalization', () => {
 
     expect(result.payload.name).toBe('x');
     expect(result.payload.learningResourceType).toEqual([
-      { id: 'https://w3id.org/kim/hcrt/text' }
+      { id: 'https://w3id.org/kim/hcrt/text', prefLabel: 'Text' }
     ]);
     expect(result.evidence.name).toBe('evidence-for-name');
   });
@@ -424,18 +424,115 @@ describe('extractMetadata — production LLM-output shape', () => {
 
     expect(result.source).toBe('llm-enriched');
     expect(result.payload.learningResourceType).toEqual([
-      { id: 'https://w3id.org/kim/hcrt/worksheet' }
+      { id: 'https://w3id.org/kim/hcrt/worksheet', prefLabel: 'Arbeitsblatt' }
     ]);
     expect(result.payload.gradeLevels).toEqual([
-      { id: `39738:${NIP_VOCAB_PUBKEY}:1` },
-      { id: `39738:${NIP_VOCAB_PUBKEY}:2` }
+      { id: `39738:${NIP_VOCAB_PUBKEY}:1`, prefLabel: 'Jahrgang 1' },
+      { id: `39738:${NIP_VOCAB_PUBKEY}:2`, prefLabel: 'Jahrgang 2' }
     ]);
     expect(result.payload.schoolTypes).toEqual([
-      { id: `39738:${NIP_VOCAB_PUBKEY}:grundschule` }
+      { id: `39738:${NIP_VOCAB_PUBKEY}:grundschule`, prefLabel: 'Grundschule' }
     ]);
     expect(result.evidence.learningResourceType).toBe('M4 Rollenspiel');
     expect(result.evidence.gradeLevels).toBe('Jahrgang 1 und 2');
     expect(result.evidence.schoolTypes).toBe('GRUNDSCHULE');
+  });
+});
+
+describe('extractMetadata — canonical prefLabel enrichment', () => {
+  // The server is the authority on labels: it has the SKOS vocab loaded, so
+  // every concept it returns must carry the canonical prefLabel. This guards
+  // against two failure modes:
+  //   1. The LLM emits {id} with no prefLabel, or with a wrong one.
+  //   2. The vocab fails to load — today's silent-skip-validation hatch
+  //      let hallucinated IDs pass through unchecked.
+
+  it('overwrites a wrong LLM-supplied prefLabel with the canonical one from the loaded vocab', async () => {
+    const html = `<html><head><title>x</title></head><body><p>y</p></body></html>`;
+    const llmClient = stubLlm(
+      {
+        learningResourceType: [
+          { id: 'https://w3id.org/kim/hcrt/text', prefLabel: 'wrong label' }
+        ]
+      },
+      { learningResourceType: 'evidence' }
+    );
+
+    const result = await extractMetadata({
+      url: 'https://example.com/r',
+      variant: 'amb',
+      fetchFn: fakeHtml(html),
+      llmClient,
+      skosSchemes: { learningResourceType: LRT_URI }
+    });
+
+    expect(result.payload.learningResourceType).toEqual([
+      { id: 'https://w3id.org/kim/hcrt/text', prefLabel: 'Text' }
+    ]);
+  });
+
+  it('attaches the canonical prefLabel when the LLM omits it', async () => {
+    const html = `<html><head><title>x</title></head><body><p>y</p></body></html>`;
+    const llmClient = stubLlm(
+      { learningResourceType: [{ id: 'https://w3id.org/kim/hcrt/video' }] },
+      { learningResourceType: 'evidence' }
+    );
+
+    const result = await extractMetadata({
+      url: 'https://example.com/r',
+      variant: 'amb',
+      fetchFn: fakeHtml(html),
+      llmClient,
+      skosSchemes: { learningResourceType: LRT_URI }
+    });
+
+    expect(result.payload.learningResourceType).toEqual([
+      { id: 'https://w3id.org/kim/hcrt/video', prefLabel: 'Video' }
+    ]);
+  });
+
+  it('drops the entire field from the payload when its vocab fails to load', async () => {
+    // Simulate "configured but failed to load" — global fetch rejects for
+    // the vocab URI. Without the fix, filterByVocab silently skipped
+    // validation for fields with empty id-sets and the LLM's hallucinations
+    // passed through unchecked.
+    const FAILING_URI = 'https://invalid-vocab.test/scheme';
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input: any) => {
+        const u = typeof input === 'string' ? input : input?.url;
+        if (typeof u === 'string' && u.includes('invalid-vocab.test')) {
+          throw new Error('simulated network failure');
+        }
+        // Real fetch shouldn't run for any other URL in this test (page
+        // fetch goes through `fetchFn`); fall back to a 404 just in case.
+        return new Response('', { status: 404 });
+      });
+
+    try {
+      const html = `<html><head><title>x</title></head><body><p>y</p></body></html>`;
+      const llmClient = stubLlm(
+        {
+          learningResourceType: [
+            { id: 'https://hallucinated.example/concept', prefLabel: 'Hallucinated' }
+          ]
+        },
+        { learningResourceType: 'evidence' }
+      );
+
+      const result = await extractMetadata({
+        url: 'https://example.com/r',
+        variant: 'amb',
+        fetchFn: fakeHtml(html),
+        llmClient,
+        skosSchemes: { learningResourceType: FAILING_URI }
+      });
+
+      expect(result.payload.learningResourceType).toBeUndefined();
+      expect(result.evidence.learningResourceType).toBeUndefined();
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 });
 

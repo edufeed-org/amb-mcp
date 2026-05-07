@@ -3,7 +3,6 @@ import { fetchPage, type FetchPageResult } from './fetchPage.js';
 import { llmEnrich, type AnthropicLike } from './llm.js';
 import { vocabSnapshot, type VocabSnapshot } from './vocabs.js';
 import { formPayload, type Variant, type ExtractMetadataResult } from './schema.js';
-import { getVocabulary } from '../skos/index.js';
 
 /**
  * Orchestrate URL → form-prefill payload.
@@ -66,30 +65,6 @@ function ogPayload(page: FetchPageResult): Record<string, unknown> {
   return out;
 }
 
-/**
- * Collect the set of valid concept IDs across all SKOS schemes the
- * caller has configured, keyed by form-field name.
- */
-async function loadVocabIds(
-  skosSchemes: Record<string, string>,
-  vocabRelays: string[] | undefined
-): Promise<Record<string, Set<string>>> {
-  const out: Record<string, Set<string>> = {};
-  await Promise.all(
-    Object.entries(skosSchemes).map(async ([field, uri]) => {
-      try {
-        const vocab = await getVocabulary(uri, { fallbackRelays: vocabRelays });
-        out[field] = new Set(vocab.concepts.keys());
-      } catch {
-        // Vocab unavailable → no validation for this field; LLM result
-        // passes through unchecked.
-        out[field] = new Set();
-      }
-    })
-  );
-  return out;
-}
-
 async function loadVocabSnapshots(
   skosSchemes: Record<string, string>,
   vocabRelays: string[] | undefined
@@ -102,11 +77,33 @@ async function loadVocabSnapshots(
           nostr: { fallbackRelays: vocabRelays }
         });
       } catch {
-        // Skip — better to enrich without grounding than to fail entirely.
+        // Skip — field gets an empty canonical-label map below, which
+        // causes filterAndEnrichByVocab to drop every entry for that
+        // field (correct: vocab unavailable → can't ground → don't
+        // surface ungrounded concepts to the user).
       }
     })
   );
   return snaps;
+}
+
+/**
+ * Build a per-field `Map<conceptId, canonicalPrefLabel>` from the loaded
+ * snapshots. Configured fields whose snapshot failed to load get an empty
+ * map (which causes the filter step to drop the field entirely).
+ */
+function vocabMapsFromSnapshots(
+  skosSchemes: Record<string, string>,
+  snapshots: Record<string, VocabSnapshot>
+): Record<string, Map<string, string>> {
+  const out: Record<string, Map<string, string>> = {};
+  for (const field of Object.keys(skosSchemes)) {
+    const snap = snapshots[field];
+    out[field] = new Map(
+      (snap?.concepts ?? []).map((c) => [c.id, c.prefLabel])
+    );
+  }
+  return out;
 }
 
 /**
@@ -192,25 +189,37 @@ function normalizeEvidence(value: unknown): Record<string, string> {
 }
 
 /**
- * Drop concept IDs not present in the loaded vocab. Empty validation
- * sets (e.g. vocab fetch failed) are treated as "skip validation".
+ * For every SKOS-grounded field: drop concept entries whose id isn't in
+ * the loaded vocab AND overwrite each surviving entry's `prefLabel` with
+ * the canonical label from the vocab snapshot. This closes two gaps in
+ * one pass:
+ *
+ *  - LLM hallucinations (id not in vocab) are dropped.
+ *  - LLM-supplied prefLabels that disagree with the vocab — or are
+ *    omitted entirely — get replaced with the canonical label.
+ *
+ * An empty map for a field (vocab failed to load) drops every entry for
+ * that field, which removes the field from the payload via the
+ * `filtered.length === 0 → delete` branch. This is the desired
+ * behavior: without grounding we can't validate, so we don't surface.
  */
-function filterByVocab(
+function filterAndEnrichByVocab(
   payload: Record<string, unknown>,
-  vocabIds: Record<string, Set<string>>
+  vocabMaps: Record<string, Map<string, string>>
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...payload };
-  for (const [field, ids] of Object.entries(vocabIds)) {
-    if (ids.size === 0) continue;
+  for (const [field, idToLabel] of Object.entries(vocabMaps)) {
     const value = out[field];
     if (!Array.isArray(value)) continue;
-    const filtered = value.filter(
-      (entry) =>
-        entry &&
-        typeof entry === 'object' &&
-        typeof (entry as { id?: unknown }).id === 'string' &&
-        ids.has((entry as { id: string }).id)
-    );
+    const filtered: Array<{ id: string; prefLabel: string }> = [];
+    for (const entry of value) {
+      if (!entry || typeof entry !== 'object') continue;
+      const id = (entry as { id?: unknown }).id;
+      if (typeof id !== 'string') continue;
+      const canonical = idToLabel.get(id);
+      if (canonical === undefined) continue;
+      filtered.push({ id, prefLabel: canonical });
+    }
     if (filtered.length === 0) {
       delete out[field];
     } else {
@@ -272,10 +281,8 @@ export async function extractMetadata(
   }
 
   // 2. LLM-enriched path
-  const [snapshots, vocabIds] = await Promise.all([
-    loadVocabSnapshots(skosSchemes, vocabRelays),
-    loadVocabIds(skosSchemes, vocabRelays)
-  ]);
+  const snapshots = await loadVocabSnapshots(skosSchemes, vocabRelays);
+  const vocabMaps = vocabMapsFromSnapshots(skosSchemes, snapshots);
 
   const llmRes = await llmEnrich({
     client: llmClient,
@@ -291,12 +298,12 @@ export async function extractMetadata(
     ...(llmModel ? { model: llmModel } : {})
   });
 
-  const vocabFields = new Set(Object.keys(vocabIds));
+  const vocabFields = new Set(Object.keys(vocabMaps));
   const payloadObject = normalizePayload(llmRes.payload);
   const normalizedPayload = normalizeConceptArrays(payloadObject, vocabFields);
   const normalizedEvidence = normalizeEvidence(llmRes.evidence);
 
-  const filtered = filterByVocab(normalizedPayload, vocabIds);
+  const filtered = filterAndEnrichByVocab(normalizedPayload, vocabMaps);
   // Layer OG fallbacks beneath the LLM output so the four cheap-to-derive
   // fields (name/description/image/inLanguage) still prefill when the
   // LLM is conservative. LLM output wins on conflict.

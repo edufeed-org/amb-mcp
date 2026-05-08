@@ -173,6 +173,32 @@ describe('llmEnrich', () => {
     expect(props.bibleReferences?.type).toBe('array');
   });
 
+  it('instructs the model that evidence must be a verbatim substring of the page in the source language', async () => {
+    // Real-world failure: the model produced English meta-commentary like
+    // "Content explicitly addresses religious and theological concepts: ..." for a
+    // German page, instead of quoting actual page text. Tighten the prompt so
+    // evidence is a verbatim substring AND in the page's language.
+    const { client, calls } = stubClient({ payload: {}, evidence: {} });
+    await llmEnrich({
+      client,
+      variant: 'amb',
+      page: { ogTags: {}, readableText: 'x' },
+      vocabs: {}
+    });
+    const params = calls[0] as { system: string | Array<{ text?: string }>; tools: Array<{ input_schema: { properties: { evidence: { description?: string } } } }> };
+    const systemText = typeof params.system === 'string'
+      ? params.system
+      : params.system.map((s) => s.text ?? '').join(' ');
+    expect(systemText).toMatch(/verbatim/i);
+    expect(systemText).toMatch(/substring|exact phrase|exactly as it appears/i);
+    expect(systemText).toMatch(/same language|source language|language of the page/i);
+
+    // The tool schema description should reinforce the same constraint so the
+    // model's structured-output discipline picks it up too.
+    const evidenceDesc = params.tools[0].input_schema.properties.evidence.description ?? '';
+    expect(evidenceDesc).toMatch(/verbatim/i);
+  });
+
   it('throws when the model returns no tool_use block', async () => {
     const client: AnthropicLike = {
       messages: {

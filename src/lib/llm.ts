@@ -123,7 +123,7 @@ const SUBMIT_TOOL = {
       evidence: {
         type: 'object',
         description:
-          'For each filled field, a quoted phrase from the page that justifies the value. Keys must match payload keys.'
+          'For each filled field, a verbatim substring copied from the page text (readableText / title / description / ogTags) — exactly as it appears, in the same language as the page. NOT a paraphrase, summary, or translation. Keys must match payload keys.'
       }
     },
     required: ['payload', 'evidence']
@@ -137,7 +137,11 @@ function systemPrompt(variant: Variant): string {
     'submit_form_payload tool exactly once. For each form field you fill,',
     'pick concept IDs verbatim from the vocabs. Only fill a field if the page',
     'gives strong evidence; leave others empty. For every filled field,',
-    'include a sibling key in `evidence` quoting the supporting page phrase.',
+    'include a sibling key in `evidence` containing a verbatim substring',
+    'copied from the page text (readableText / title / description / ogTags) —',
+    'exactly as it appears, in the same language as the page. Do NOT paraphrase,',
+    'summarize, or translate. If you cannot find an exact phrase from the page',
+    'that supports a value, omit the field rather than fabricate evidence.',
     '',
     'Always attempt to fill the simple text fields when the page provides them:',
     '`name` (resource title — derive from the page title, JSON-LD `name`/`headline`,',

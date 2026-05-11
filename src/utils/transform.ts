@@ -1,7 +1,16 @@
-import type { NostrEvent } from 'nostr-tools';
+import { nip19, type NostrEvent } from 'nostr-tools';
 import type { AmbLearningResourceBase, LocalizedString } from 'amb-nostr-converter';
 import type { AMBResourceWithMetadata } from '../types/amb.js';
 import { getLabel } from '../skos/parser.js';
+
+/**
+ * Base URL of the edufeed-app frontend. When set, `toSimplifiedResource`
+ * emits a `url` field per resource so LLMs (and other MCP clients) can
+ * link users directly to the resource page.
+ *
+ * The trailing slash is stripped so we can always join with `/<naddr>`.
+ */
+const EDUFEED_APP_BASE_URL = process.env.EDUFEED_APP_BASE_URL?.replace(/\/+$/, '') || undefined;
 
 /**
  * Get a tag value by name
@@ -134,6 +143,7 @@ export function eventToAMBResource(event: NostrEvent): AMBResourceWithMetadata |
       resource,
       nostr: {
         eventId: event.id,
+        kind: event.kind,
         pubkey: event.pubkey,
         createdAt: event.created_at,
         dTag,
@@ -169,12 +179,33 @@ function resolveLabel(prefLabel: LocalizedString | undefined, language: string):
 export function toSimplifiedResource(ambResource: AMBResourceWithMetadata, language: string = 'de'): SimplifiedAMBResource {
   const { resource, nostr } = ambResource;
 
+  // Encode the addressable Nostr identifier (naddr) and a frontend URL when
+  // EDUFEED_APP_BASE_URL is configured. Both are optional in the response —
+  // if encoding fails or the env var is unset, callers still get a usable
+  // result without the link fields.
+  let naddr: string | undefined;
+  let url: string | undefined;
+  try {
+    naddr = nip19.naddrEncode({
+      kind: nostr.kind,
+      pubkey: nostr.pubkey,
+      identifier: nostr.dTag,
+      relays: [],
+    });
+    if (EDUFEED_APP_BASE_URL) {
+      url = `${EDUFEED_APP_BASE_URL}/${naddr}`;
+    }
+  } catch {
+    // Leave naddr/url undefined on encoding failure (malformed pubkey, etc.)
+  }
+
   return {
     id: resource.id,
     identifier: resource.id,
     type: resource.type,
     name: resource.name,
     description: resource.description,
+    url,
 
     // Educational metadata — resolved to single-language strings
     learningResourceType: resource.learningResourceType
@@ -206,6 +237,7 @@ export function toSimplifiedResource(ambResource: AMBResourceWithMetadata, langu
       eventId: nostr.eventId,
       pubkey: nostr.pubkey,
       createdAt: nostr.createdAt,
+      naddr,
     },
   };
 }
@@ -220,6 +252,13 @@ export interface SimplifiedAMBResource {
   type: string[];
   name: string;
   description?: string;
+
+  /**
+   * Direct link to the resource on the edufeed-app frontend.
+   * Present only when `EDUFEED_APP_BASE_URL` is configured on the server.
+   * LLMs should cite this as a markdown link when recommending the resource.
+   */
+  url?: string;
 
   learningResourceType?: string[];
   educationalLevel?: string[];
@@ -238,5 +277,10 @@ export interface SimplifiedAMBResource {
     eventId: string;
     pubkey: string;
     createdAt: number;
+    /**
+     * NIP-19 naddr (addressable identifier) for this kind 30142 event.
+     * Useful for non-web Nostr clients that want to fetch the event directly.
+     */
+    naddr?: string;
   };
 }

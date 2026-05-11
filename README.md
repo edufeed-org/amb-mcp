@@ -50,6 +50,7 @@ cp .env.example .env
 | `ANTHROPIC_API_KEY` | `extract_metadata` | _(unset)_ | Enables LLM-grounded SKOS field extraction. When unset the tool degrades to OpenGraph/JSON-LD only. |
 | `ANTHROPIC_MODEL` | `extract_metadata` | `claude-sonnet-4-6` | Override the default Anthropic model. |
 | `SKOS_SCHEMES` | `extract_metadata` | _(unset)_ | JSON map `{ "<form-field>": "<scheme-uri>" }` of default vocabularies used when the caller does not pass `skosSchemes` explicitly. |
+| `EDUFEED_APP_BASE_URL` | both transports | _(unset)_ | Frontend base URL (no trailing slash, e.g. `https://app.edufeed.org`). When set, `search_resources` and `get_resource` include a `url` field per resource pointing at the edufeed-app page so LLM clients can render direct links. |
 
 ## Usage
 
@@ -164,6 +165,13 @@ Parameters:
 | `identifier` | string | Resource d-tag (URL identifier) |
 | `author` | string | Author pubkey for disambiguation |
 | `eventId` | string | Direct Nostr event ID lookup |
+
+#### Response shape (search_resources and get_resource)
+
+Each returned resource includes the standard AMB fields plus:
+
+- `nostr.naddr` — NIP-19 addressable identifier (`kind=30142`, pubkey, d-tag). Useful for any Nostr client.
+- `url` — direct link to the edufeed-app page for this resource. **Only present when `EDUFEED_APP_BASE_URL` is configured.** LLM clients should cite this as a markdown link (`[name](url)`) when recommending the resource so users can open it.
 
 ### browse_subjects
 

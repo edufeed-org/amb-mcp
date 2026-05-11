@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
+import { nip19 } from 'nostr-tools';
 import { eventToAMBResource, eventsToAMBResources, toSimplifiedResource } from '../../src/utils/transform.js';
 import type { NostrEvent } from 'nostr-tools';
 
+// Valid 32-byte hex pubkey so nip19.naddrEncode() succeeds in tests.
+const VALID_PUBKEY = '0'.repeat(63) + '1';
+
 const createMockEvent = (tags: string[][], dTag: string): NostrEvent => ({
   id: 'event123',
-  pubkey: 'pubkey123',
+  pubkey: VALID_PUBKEY,
   created_at: 1700000000,
   kind: 30142,
   tags: [['d', dTag], ...tags],
@@ -37,7 +41,8 @@ describe('eventToAMBResource', () => {
     expect(result!.resource.publisher).toHaveLength(1);
     expect(result!.resource.publisher![0].name).toBe('Example University');
     expect(result!.nostr.eventId).toBe('event123');
-    expect(result!.nostr.pubkey).toBe('pubkey123');
+    expect(result!.nostr.pubkey).toBe(VALID_PUBKEY);
+    expect(result!.nostr.kind).toBe(30142);
     expect(result!.nostr.dTag).toBe('resource-1');
   });
 
@@ -159,5 +164,32 @@ describe('toSimplifiedResource', () => {
     expect(simplified.isAccessibleForFree).toBe(true);
     expect(simplified.datePublished).toBe('2024-01-15');
     expect(simplified.nostr.eventId).toBe('event123');
+  });
+
+  it('emits naddr for the resource', () => {
+    const event = createMockEvent([['name', 'Test']], 'resource-1');
+    const ambResource = eventToAMBResource(event)!;
+    const simplified = toSimplifiedResource(ambResource);
+
+    expect(simplified.nostr.naddr).toBeDefined();
+    const decoded = nip19.decode(simplified.nostr.naddr!);
+    expect(decoded.type).toBe('naddr');
+    const data = decoded.data as { kind: number; pubkey: string; identifier: string };
+    expect(data.kind).toBe(30142);
+    expect(data.pubkey).toBe(VALID_PUBKEY);
+    expect(data.identifier).toBe('resource-1');
+  });
+
+  it('omits url when EDUFEED_APP_BASE_URL is unset', () => {
+    // Tests run without the env var set (vitest config does not inject it).
+    // The transform module reads the env var at import time, so this asserts
+    // the default unset behavior.
+    const event = createMockEvent([['name', 'Test']], 'resource-1');
+    const ambResource = eventToAMBResource(event)!;
+    const simplified = toSimplifiedResource(ambResource);
+
+    // url is undefined when not configured; naddr is still emitted.
+    expect(simplified.url).toBeUndefined();
+    expect(simplified.nostr.naddr).toBeDefined();
   });
 });

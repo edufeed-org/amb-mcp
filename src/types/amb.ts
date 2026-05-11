@@ -49,6 +49,7 @@ export interface AMBResourceWithMetadata {
   /** Nostr event metadata */
   nostr: {
     eventId: string;
+    kind: number;
     pubkey: string;
     createdAt: number;
     dTag: string;

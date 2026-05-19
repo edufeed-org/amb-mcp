@@ -43,8 +43,26 @@ export interface FetchPageResult {
   readableText: string;
 }
 
-const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
+// 20 MiB is enough for the image-heavy German educational PDFs we see in
+// practice (the rpi-ekkw-ekhn konfi material runs ~8 MiB). Was 5 MiB until
+// users reported empty AI suggestions on perfectly-valid 6–10 MiB PDFs.
+const DEFAULT_MAX_BYTES = 20 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
+
+/**
+ * Thrown by fetchPage when the response body exceeds `maxBytes`. Carries a
+ * `code: 'page_too_large'` so the MCP tool path can surface this distinctly
+ * from generic fetch / parse failures — otherwise oversized PDFs masquerade
+ * as LLM failures to the user.
+ */
+export class PageTooLargeError extends Error {
+  /** Stable machine-readable code; consumers match on this, not on .message. */
+  readonly code = 'page_too_large' as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'PageTooLargeError';
+  }
+}
 
 function isPrivateOrLocalHost(host: string): boolean {
   if (host === 'localhost' || host === '0.0.0.0' || host === '::1') return true;
@@ -182,15 +200,22 @@ export async function fetchPage(input: FetchPageInput): Promise<FetchPageResult>
   if (isPdf) {
     let readableText = '';
     if (pdfExtract) {
+      // Size cap is checked OUTSIDE the try so it surfaces as a typed error
+      // instead of being swallowed into "empty text → empty LLM payload".
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength > maxBytes) {
+        throw new PageTooLargeError(
+          `PDF body (${buffer.byteLength} bytes) exceeds size cap (${maxBytes} bytes)`
+        );
+      }
       try {
-        const buffer = await response.arrayBuffer();
-        if (buffer.byteLength > maxBytes) {
-          throw new Error('Response body exceeds size cap');
-        }
         readableText = await pdfExtract(buffer);
       } catch {
-        // Graceful: leave readableText empty so downstream falls back to
-        // OG/baseline rather than failing the whole enrichment.
+        // Graceful: leave readableText empty on genuine parse failure
+        // (corrupt PDF etc.) so downstream falls back to OG/baseline rather
+        // than failing the whole enrichment. Distinct from the size-cap
+        // case above, which is a hard failure the user can act on
+        // ("upload a smaller file" or "we'll raise the cap").
       }
     }
     return {
@@ -204,7 +229,9 @@ export async function fetchPage(input: FetchPageInput): Promise<FetchPageResult>
 
   const html = await response.text();
   if (html.length > maxBytes) {
-    throw new Error('Response body exceeds size cap');
+    throw new PageTooLargeError(
+      `HTML body (${html.length} bytes) exceeds size cap (${maxBytes} bytes)`
+    );
   }
 
   const { document } = parseHTML(html);

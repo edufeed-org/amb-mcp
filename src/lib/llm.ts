@@ -40,6 +40,15 @@ export interface LlmPageInput {
   readableText: string;
 }
 
+export interface RetryOptions {
+  /** Total attempts including the first try. Default 4. */
+  maxAttempts?: number;
+  /** Initial backoff in ms (doubled each retry). Default 1000. */
+  baseDelayMs?: number;
+  /** Cap on per-attempt backoff. Default 8000. */
+  maxDelayMs?: number;
+}
+
 export interface LlmEnrichInput {
   client: AnthropicLike;
   variant: Variant;
@@ -48,7 +57,32 @@ export interface LlmEnrichInput {
   vocabs: Record<string, VocabSnapshot>;
   model?: string;
   maxTokens?: number;
+  retry?: RetryOptions;
 }
+
+const DEFAULT_RETRY: Required<RetryOptions> = {
+  maxAttempts: 4,
+  baseDelayMs: 1000,
+  maxDelayMs: 8000
+};
+
+/**
+ * Retryable Anthropic failures: transient capacity (529 overloaded_error),
+ * rate limits (429), and generic 5xx. Auth / validation / billing errors
+ * (400, 401, 403, 404) are fatal — retrying just wastes budget.
+ */
+function isRetryableAnthropicError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { status?: number; error?: { error?: { type?: string } } };
+  const status = typeof e.status === 'number' ? e.status : undefined;
+  const type = e.error?.error?.type;
+  if (type === 'overloaded_error' || type === 'rate_limit_error') return true;
+  if (status === 429 || status === 529) return true;
+  if (typeof status === 'number' && status >= 500 && status < 600) return true;
+  return false;
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export interface LlmEnrichResult {
   payload: Record<string, unknown>;
@@ -180,6 +214,7 @@ function systemPrompt(variant: Variant): string {
 
 export async function llmEnrich(input: LlmEnrichInput): Promise<LlmEnrichResult> {
   const { client, variant, page, vocabs, model = DEFAULT_MODEL, maxTokens = 2048 } = input;
+  const retry: Required<RetryOptions> = { ...DEFAULT_RETRY, ...input.retry };
 
   const userContent: Array<Record<string, unknown>> = [];
 
@@ -220,14 +255,44 @@ export async function llmEnrich(input: LlmEnrichInput): Promise<LlmEnrichResult>
       )
   });
 
-  const response = await client.messages.create({
+  // Retry Anthropic transient failures (529 overloaded, 429 rate limit, 5xx).
+  // The MCP SDK swallows tool exceptions into `isError:true` envelopes that
+  // never reach stderr, so we also `console.error` each failed attempt — that
+  // is the only signal that surfaces in `docker compose logs`.
+  const callParams = {
     model,
     max_tokens: maxTokens,
     system: systemPrompt(variant),
     tools: [SUBMIT_TOOL],
     tool_choice: { type: 'tool', name: 'submit_form_payload' },
     messages: [{ role: 'user', content: userContent }]
-  });
+  };
+
+  let response: Awaited<ReturnType<AnthropicLike['messages']['create']>> | undefined;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= retry.maxAttempts; attempt++) {
+    try {
+      response = await client.messages.create(callParams);
+      lastErr = undefined;
+      break;
+    } catch (err) {
+      lastErr = err;
+      const status = (err as { status?: number } | null)?.status;
+      const type = (err as { error?: { error?: { type?: string } } } | null)?.error?.error?.type;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[llmEnrich] attempt ${attempt}/${retry.maxAttempts} failed (model=${model} status=${status ?? '?'} type=${type ?? '?'}): ${msg}`
+      );
+      if (attempt >= retry.maxAttempts || !isRetryableAnthropicError(err)) throw err;
+      const backoff = Math.min(retry.maxDelayMs, retry.baseDelayMs * 2 ** (attempt - 1));
+      // Full jitter — avoids thundering-herd if many extracts retry in lockstep.
+      const wait = Math.floor(Math.random() * backoff);
+      await sleep(wait);
+    }
+  }
+  if (!response) {
+    throw lastErr ?? new Error('llmEnrich: no response and no error captured');
+  }
 
   const toolUse = response.content.find(
     (b): b is { type: 'tool_use'; id: string; name: string; input: unknown } =>

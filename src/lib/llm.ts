@@ -144,14 +144,30 @@ const SUBMIT_TOOL = {
           learningResourceType: conceptArray,
           educationalLevels: conceptArray,
           about: conceptArray,
-          // EKW extension fields
+          // EKW extension fields (school context)
           ekwFachrichtung: conceptArray,
           gradeLevels: conceptArray,
           schoolTypes: conceptArray,
           didacticConcepts: conceptArray,
           methods: conceptArray,
           methodOther: { type: 'string' },
-          bibleReferences: { type: 'array', items: { type: 'string' } }
+          bibleReferences: { type: 'array', items: { type: 'string' } },
+          // Konfi-Arbeit extension fields (confirmation program). Field names
+          // mirror schemeKeys in edufeed-app's wizard config so the wizard
+          // can apply enrichment results without re-keying.
+          konfiZielgruppen: conceptArray,
+          konfiLernformat: conceptArray,
+          konfiZeitstruktur: conceptArray,
+          konfiBeteiligte: conceptArray,
+          konfiThemen: conceptArray,
+          konfiDimensionen: conceptArray,
+          konfiMethode: conceptArray,
+          konfiMaterialaufwand: conceptArray,
+          konfiTechnikbedarf: conceptArray,
+          konfiLernorte: conceptArray,
+          landeskirchen: conceptArray,
+          plainLanguage: { type: 'boolean' },
+          requiredMaterialsNote: { type: 'string' }
         }
       },
       evidence: {
@@ -164,8 +180,55 @@ const SUBMIT_TOOL = {
   }
 } as const;
 
+/**
+ * Konfi-Arbeit field guidance. Vocabularies overlap semantically — without
+ * explicit distinctions, models conflate Themen/Dimensionen and
+ * Lernformat/Methode. The wording mirrors how edufeed-app's wizard
+ * documents these fields to users (`messages/de.json` konfi_field_*
+ * tooltips), so the model gets the same mental model the human form
+ * gets.
+ */
+const KONFI_FIELD_GUIDE = [
+  '',
+  'Konfi-Arbeit (confirmation program) field semantics — read carefully',
+  'before picking concepts, because several vocabularies overlap:',
+  '- `konfiZielgruppen`: WHO the resource is for (Konfis, Teamer:innen,',
+  '  Hauptamtliche, …). NOT a school class.',
+  '- `konfiLernformat`: the FORMAT (Wochenende, Camp, Gruppenstunde, …).',
+  '  Coarse organizational shape; NOT a teaching method.',
+  '- `konfiZeitstruktur`: time SHAPE (Einzeltermin, Reihe, kompakt, …).',
+  '  Orthogonal to format — same format can have different time structures.',
+  '- `konfiBeteiligte`: WHO LEADS / participates besides the group',
+  '  (Pfarrer:in, Teamer:innen, Eltern, externe Gäste, …).',
+  '- `konfiThemen`: TOPICS in the content sense (Taufe, Abendmahl,',
+  '  Heiliger Geist, Gerechtigkeit, …). Concrete subject matter.',
+  '- `konfiDimensionen`: pedagogical/theological DIMENSIONS the resource',
+  '  touches (Glauben & Zweifel, Gemeinschaft, Identität, …). Abstract',
+  '  framings — NOT a topic.',
+  '- `konfiMethode`: didactic METHODS (Standbild, Lernstationen,',
+  '  Bibliolog, kreatives Schreiben, …). Concrete activities; NOT a',
+  '  Lernformat.',
+  '- `konfiMaterialaufwand`: how much MATERIAL is needed (gering, mittel,',
+  '  hoch, …). A single concept.',
+  '- `konfiTechnikbedarf`: TECH needed (Beamer, WLAN, Smartphones, …).',
+  '- `konfiLernorte`: PLACES the activity happens (Gemeindehaus, Kirche,',
+  '  Außenraum, …).',
+  '- `landeskirchen`: regional church the material originates from or',
+  '  targets (EKKW, EKHN, …).',
+  '- `plainLanguage` (boolean): set true only when the source EXPLICITLY',
+  '  flags itself as easy / plain language (Einfache Sprache, Leichte',
+  '  Sprache). Do not infer from style alone.',
+  '- `requiredMaterialsNote`: free-text shortlist of required materials',
+  '  when the source spells them out (e.g. "Stifte, Plakate, Klebepunkte").',
+  '- `bibleReferences`: bible passages in book chapter,verse form, e.g.',
+  '  "Mt 5,1-12" or "Apostelgeschichte 2,1-12". Verbatim from the source.',
+  'DO NOT use school-context fields (`schoolTypes`, `gradeLevels`,',
+  '`ekwFachrichtung`) in this variant — Konfi pedagogy is not school',
+  'teaching. The schema will strip them.'
+];
+
 function systemPrompt(variant: Variant): string {
-  return [
+  const base = [
     `You are a metadata extractor. Variant: ${variant}.`,
     'Read the page content and the provided SKOS vocabularies, then call the',
     'submit_form_payload tool exactly once. For each form field you fill,',
@@ -209,11 +272,13 @@ function systemPrompt(variant: Variant): string {
     '  alongside copyright notices). For PDFs without OpenGraph tags, you must',
     '  still synthesize these fields from the readable text. Do not leave them',
     '  empty just because no OG metadata is present.'
-  ].join(' ');
+  ];
+  const parts = variant === 'konfi' ? [...base, ...KONFI_FIELD_GUIDE] : base;
+  return parts.join(' ');
 }
 
 export async function llmEnrich(input: LlmEnrichInput): Promise<LlmEnrichResult> {
-  const { client, variant, page, vocabs, model = DEFAULT_MODEL, maxTokens = 2048 } = input;
+  const { client, variant, page, vocabs, model = DEFAULT_MODEL, maxTokens = 4096 } = input;
   const retry: Required<RetryOptions> = { ...DEFAULT_RETRY, ...input.retry };
 
   const userContent: Array<Record<string, unknown>> = [];

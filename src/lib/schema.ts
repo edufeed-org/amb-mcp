@@ -3,14 +3,20 @@ import { z } from 'zod';
 /**
  * Form-payload schema for the URL → form prefill feature.
  *
- * Two variants:
- *  - 'amb' — generic AMB educational resources
- *  - 'ekw' — adds EKKW-specific religious-education fields on top of AMB
+ * Three variants:
+ *  - 'amb'   — generic AMB educational resources
+ *  - 'ekw'   — adds EKKW-specific religious-education fields on top of AMB
+ *              (school-context: schoolTypes, gradeLevels, ekwFachrichtung, …)
+ *  - 'konfi' — Konfi-Arbeit (confirmation program); adds its own vocabulary
+ *              family (Zielgruppen, Lernformat, Themen, …) on top of AMB.
+ *              Disjoint from 'ekw' because Konfi pedagogy ≠ school pedagogy.
  *
- * Variant-aware via .strict(): EKW-only fields are rejected under 'amb'.
+ * Variant-aware via .strict(): variant-specific fields are rejected when sent
+ * under the wrong variant. `bibleReferences` is shared between 'ekw' and
+ * 'konfi' since both deal with biblical content.
  */
 
-export type Variant = 'amb' | 'ekw';
+export type Variant = 'amb' | 'ekw' | 'konfi';
 
 const localizedConcept = z.object({
   id: z.string(),
@@ -53,19 +59,49 @@ const ekwExtensions = z.object({
   bibleReferences: z.array(z.string()).optional()
 });
 
+// Konfi-Arbeit extensions. Field names mirror `schemeKey` in the edufeed-app
+// wizard's `bildungsbereich.js` konfi step4 config so the wizard's
+// `applyEnrichmentToForm` can map directly without re-keying.
+const konfiExtensions = z.object({
+  konfiZielgruppen: z.array(localizedConcept).optional(),
+  konfiLernformat: z.array(localizedConcept).optional(),
+  konfiZeitstruktur: z.array(localizedConcept).optional(),
+  konfiBeteiligte: z.array(localizedConcept).optional(),
+  konfiThemen: z.array(localizedConcept).optional(),
+  konfiDimensionen: z.array(localizedConcept).optional(),
+  konfiMethode: z.array(localizedConcept).optional(),
+  konfiMaterialaufwand: z.array(localizedConcept).optional(),
+  konfiTechnikbedarf: z.array(localizedConcept).optional(),
+  konfiLernorte: z.array(localizedConcept).optional(),
+  landeskirchen: z.array(localizedConcept).optional(),
+  plainLanguage: z.boolean().optional(),
+  requiredMaterialsNote: z.string().optional(),
+  // Shared with EKW — both variants deal with biblical content.
+  bibleReferences: z.array(z.string()).optional()
+});
+
 const ambSchema = ambBase.strict();
 const ekwSchema = ambBase.merge(ekwExtensions).strict();
+const konfiSchema = ambBase.merge(konfiExtensions).strict();
 
 /**
  * Return the variant-appropriate form-payload zod schema.
  */
 export function formPayload(variant: Variant) {
-  return variant === 'ekw' ? ekwSchema : ambSchema;
+  switch (variant) {
+    case 'ekw':
+      return ekwSchema;
+    case 'konfi':
+      return konfiSchema;
+    default:
+      return ambSchema;
+  }
 }
 
 export type FormPayloadAmb = z.infer<typeof ambSchema>;
 export type FormPayloadEkw = z.infer<typeof ekwSchema>;
-export type FormPayload = FormPayloadAmb | FormPayloadEkw;
+export type FormPayloadKonfi = z.infer<typeof konfiSchema>;
+export type FormPayload = FormPayloadAmb | FormPayloadEkw | FormPayloadKonfi;
 
 /**
  * The full result returned by extractMetadata().

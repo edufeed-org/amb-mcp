@@ -217,4 +217,138 @@ describe('llmEnrich', () => {
       })
     ).rejects.toThrow();
   });
+
+  describe('retry on transient Anthropic errors', () => {
+    /**
+     * Build an Anthropic error mimicking the SDK's APIError shape. The SDK
+     * exposes `status` as a number on thrown errors; `error.error.type` is
+     * the Anthropic-side classification (`overloaded_error`, `rate_limit`,
+     * etc.). We replicate both so the retry policy can match on either.
+     */
+    function anthropicError(status: number, type: string, message = 'boom'): Error & {
+      status: number;
+      error?: { type: string; error: { type: string; message: string } };
+    } {
+      const err = new Error(message) as Error & {
+        status: number;
+        error?: { type: string; error: { type: string; message: string } };
+      };
+      err.status = status;
+      err.error = { type: 'error', error: { type, message } };
+      return err;
+    }
+
+    function okResponse(toolInput: unknown) {
+      return {
+        stop_reason: 'tool_use',
+        content: [
+          {
+            type: 'tool_use' as const,
+            id: 'toolu_test',
+            name: 'submit_form_payload',
+            input: toolInput
+          }
+        ]
+      };
+    }
+
+    it('retries on 529 overloaded_error and succeeds on the second attempt', async () => {
+      const create = vi
+        .fn()
+        .mockRejectedValueOnce(anthropicError(529, 'overloaded_error', 'Overloaded'))
+        .mockResolvedValueOnce(okResponse({ payload: { name: 'ok' }, evidence: { name: 'ok' } }));
+      const client: AnthropicLike = { messages: { create } };
+
+      const result = await llmEnrich({
+        client,
+        variant: 'amb',
+        page: { ogTags: {}, readableText: 'x' },
+        vocabs: {},
+        // Tight timing so the test stays fast.
+        retry: { maxAttempts: 3, baseDelayMs: 1, maxDelayMs: 2 }
+      });
+
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(result.payload).toEqual({ name: 'ok' });
+    });
+
+    it('retries on 429 rate-limit errors', async () => {
+      const create = vi
+        .fn()
+        .mockRejectedValueOnce(anthropicError(429, 'rate_limit_error', 'Rate limited'))
+        .mockResolvedValueOnce(okResponse({ payload: {}, evidence: {} }));
+      const client: AnthropicLike = { messages: { create } };
+
+      await llmEnrich({
+        client,
+        variant: 'amb',
+        page: { ogTags: {}, readableText: 'x' },
+        vocabs: {},
+        retry: { maxAttempts: 3, baseDelayMs: 1, maxDelayMs: 2 }
+      });
+
+      expect(create).toHaveBeenCalledTimes(2);
+    });
+
+    it('does NOT retry on 400/validation errors', async () => {
+      const create = vi.fn().mockRejectedValue(anthropicError(400, 'invalid_request_error', 'bad'));
+      const client: AnthropicLike = { messages: { create } };
+
+      await expect(
+        llmEnrich({
+          client,
+          variant: 'amb',
+          page: { ogTags: {}, readableText: 'x' },
+          vocabs: {},
+          retry: { maxAttempts: 3, baseDelayMs: 1, maxDelayMs: 2 }
+        })
+      ).rejects.toThrow();
+      expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    it('gives up after maxAttempts and surfaces the original error', async () => {
+      const create = vi
+        .fn()
+        .mockRejectedValue(anthropicError(529, 'overloaded_error', 'Overloaded'));
+      const client: AnthropicLike = { messages: { create } };
+
+      await expect(
+        llmEnrich({
+          client,
+          variant: 'amb',
+          page: { ogTags: {}, readableText: 'x' },
+          vocabs: {},
+          retry: { maxAttempts: 3, baseDelayMs: 1, maxDelayMs: 2 }
+        })
+      ).rejects.toThrow(/Overloaded/);
+      expect(create).toHaveBeenCalledTimes(3);
+    });
+
+    it('logs Anthropic errors via console.error so failures appear in docker logs', async () => {
+      // Today extract_metadata failures vanish into the MCP SDK's tool-error
+      // envelope and never reach stderr. Make sure llmEnrich logs each
+      // attempt's failure so future incidents are debuggable from the
+      // container logs alone.
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const create = vi
+        .fn()
+        .mockRejectedValueOnce(anthropicError(529, 'overloaded_error', 'Overloaded'))
+        .mockResolvedValueOnce(okResponse({ payload: {}, evidence: {} }));
+      const client: AnthropicLike = { messages: { create } };
+
+      await llmEnrich({
+        client,
+        variant: 'amb',
+        page: { ogTags: {}, readableText: 'x' },
+        vocabs: {},
+        retry: { maxAttempts: 3, baseDelayMs: 1, maxDelayMs: 2 }
+      });
+
+      expect(spy).toHaveBeenCalled();
+      const msg = spy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(msg).toMatch(/llmEnrich/i);
+      expect(msg).toMatch(/529|overloaded/i);
+      spy.mockRestore();
+    });
+  });
 });

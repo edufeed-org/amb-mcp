@@ -16,7 +16,15 @@ import { z } from 'zod';
  * 'konfi' since both deal with biblical content.
  */
 
-export type Variant = 'amb' | 'ekw' | 'konfi';
+/**
+ * Single source of truth for valid variant strings. Exported as a runtime
+ * constant so the MCP tool boundary (`src/tools/extract.ts`) can derive its
+ * input enum from the same list — otherwise the two diverge silently and a
+ * new variant added here is rejected at the tool boundary before reaching
+ * the handler.
+ */
+export const VARIANTS = ['amb', 'ekw', 'konfi'] as const;
+export type Variant = (typeof VARIANTS)[number];
 
 const localizedConcept = z.object({
   id: z.string(),

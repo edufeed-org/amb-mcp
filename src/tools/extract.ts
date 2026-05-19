@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { extractMetadata } from '../lib/extractMetadata.js';
 import type { AnthropicLike } from '../lib/llm.js';
 import { extractPdfText } from '../lib/pdfExtractor.js';
+import { VARIANTS } from '../lib/schema.js';
 
 /**
  * `extract_metadata` MCP tool.
@@ -42,10 +43,13 @@ export function registerExtractTool(server: McpServer): void {
       inputSchema: {
         url: z.string().url().describe('Public http(s) URL of the page to extract.'),
         variant: z
-          .enum(['amb', 'ekw'])
+          .enum(VARIANTS)
           .optional()
           .default('amb')
-          .describe('Form variant. EKW adds religious-education fields (Klassenstufen, Schulart, etc.).'),
+          .describe(
+            'Form variant. EKW adds religious-education fields (Klassenstufen, Schulart, …); ' +
+              'konfi adds Konfi-Arbeit fields (Zielgruppen, Lernformat, Themen, …).'
+          ),
         skosSchemes: z
           .record(z.string(), z.string())
           .optional()

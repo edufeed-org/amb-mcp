@@ -222,3 +222,63 @@ describe('fetchPage non-200 responses', () => {
     ).rejects.toThrow(/404|fetch/i);
   });
 });
+
+describe('fetchPage size cap', () => {
+  /** Build a fake fetch returning a Uint8Array body as application/pdf. */
+  const fakePdf = (bytes: Uint8Array) => async (_url: string | URL): Promise<Response> =>
+    new Response(bytes, { status: 200, headers: { 'content-type': 'application/pdf' } });
+
+  it('throws a typed page_too_large error when a PDF exceeds the byte cap (and does NOT silently return empty)', async () => {
+    // Previously, fetchPage's PDF branch swallowed the size-cap check inside a
+    // catch and returned readableText: ''. That made oversized educational
+    // PDFs masquerade as LLM failures. We want this to surface distinctly so
+    // the caller can show "page too large" instead of "AI failed".
+    const oversized = new Uint8Array(1024); // 1 KiB body, 100-byte cap
+    const pdfExtract = async () => 'should never run';
+    let caught: unknown;
+    try {
+      await fetchPage({
+        url: 'https://example.org/big.pdf',
+        fetchFn: fakePdf(oversized),
+        pdfExtract,
+        maxBytes: 100
+      });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as { code?: string }).code).toBe('page_too_large');
+  });
+
+  it('throws a typed page_too_large error when HTML exceeds the byte cap', async () => {
+    const html = 'x'.repeat(2000);
+    let caught: unknown;
+    try {
+      await fetchPage({
+        url: 'https://example.com/',
+        fetchFn: fakeHtml(html),
+        maxBytes: 100
+      });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as { code?: string }).code).toBe('page_too_large');
+  });
+
+  it('still degrades to empty readableText when pdfExtract throws a non-size error', async () => {
+    // Genuine parse failure of a small PDF should keep the graceful-degradation
+    // path — empty text, no throw. Only size-cap failures should propagate.
+    const pdfExtract = async () => {
+      throw new Error('corrupt PDF');
+    };
+    const page = await fetchPage({
+      url: 'https://example.org/lesson.pdf',
+      fetchFn: fakePdf(new Uint8Array([0x25, 0x50, 0x44, 0x46])),
+      pdfExtract,
+      maxBytes: 1000
+    });
+    expect(page.contentType).toBe('pdf');
+    expect(page.readableText).toBe('');
+  });
+});

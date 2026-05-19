@@ -228,6 +228,98 @@ describe('extractMetadata — LLM-enriched path', () => {
 
     expect(result.payload.bibleReferences).toEqual(['Mt 5,1-12']);
   });
+
+  it('keeps Konfi-only vocab fields and bibleReferences under variant=konfi', async () => {
+    // Konfi vocabularies share the LLM's tool-input shape with the EKW
+    // schemes — generic concept-array fields keyed by form-field name. As
+    // long as the variant accepts them, the same filter+enrich pipeline
+    // applies. This locks in the variant routing end-to-end.
+    const KONFI_ZIELGRUPPEN_URI = 'naddr-konfi-zielgruppen';
+    const KONFI_ZIELGRUPPEN_ID = 'https://w3id.org/kim/edufeed/konfi/zielgruppen/konfis';
+    vocabularyCache.set(KONFI_ZIELGRUPPEN_URI, {
+      scheme: {
+        id: KONFI_ZIELGRUPPEN_URI,
+        type: 'ConceptScheme',
+        title: { de: 'Zielgruppen' },
+        hasTopConcept: []
+      },
+      concepts: new Map([
+        [
+          KONFI_ZIELGRUPPEN_ID,
+          { id: KONFI_ZIELGRUPPEN_ID, type: 'Concept', prefLabel: { de: 'Konfis' } }
+        ]
+      ])
+    });
+
+    const html = `<html><head><title>Konfi-Stationen</title></head><body><p>Heiliger Geist</p></body></html>`;
+    const llmClient = stubLlm(
+      {
+        name: 'Konfi-Stationen',
+        konfiZielgruppen: [{ id: KONFI_ZIELGRUPPEN_ID }],
+        bibleReferences: ['Apostelgeschichte 2,1-12'],
+        plainLanguage: true,
+        requiredMaterialsNote: 'Stifte, Plakate'
+      },
+      {
+        name: 'Konfi-Stationen',
+        konfiZielgruppen: 'für Konfis',
+        bibleReferences: 'Pfingstgeschichte',
+        requiredMaterialsNote: 'Stifte und Plakate werden benötigt'
+      }
+    );
+
+    const result = await extractMetadata({
+      url: 'https://example.com/r',
+      variant: 'konfi',
+      fetchFn: fakeHtml(html),
+      llmClient,
+      skosSchemes: { konfiZielgruppen: KONFI_ZIELGRUPPEN_URI }
+    });
+
+    expect(result.payload.konfiZielgruppen).toEqual([
+      { id: KONFI_ZIELGRUPPEN_ID, prefLabel: 'Konfis' }
+    ]);
+    expect(result.payload.bibleReferences).toEqual(['Apostelgeschichte 2,1-12']);
+    expect(result.payload.plainLanguage).toBe(true);
+    expect(result.payload.requiredMaterialsNote).toBe('Stifte, Plakate');
+  });
+
+  it('strips EKW school fields (schoolTypes, gradeLevels) under variant=konfi', async () => {
+    // If the LLM hallucinates school-context fields in a Konfi extraction,
+    // the variant schema strips them — Konfi pedagogy uses its own vocab
+    // family, so leaking school fields would render in places the form
+    // never displays.
+    const html = `<html><head><title>x</title></head><body><p>y</p></body></html>`;
+    const llmClient = stubLlm(
+      {
+        name: 'x',
+        schoolTypes: [{ id: 'https://example.org/grundschule' }],
+        gradeLevels: [{ id: 'https://example.org/q1' }],
+        ekwFachrichtung: [{ id: 'https://example.org/evangelisch' }]
+      },
+      {
+        name: 'n',
+        schoolTypes: 'Grundschule',
+        gradeLevels: 'Q1',
+        ekwFachrichtung: 'evangelisch'
+      }
+    );
+
+    const result = await extractMetadata({
+      url: 'https://example.com/r',
+      variant: 'konfi',
+      fetchFn: fakeHtml(html),
+      llmClient,
+      skosSchemes: {}
+    });
+
+    expect(result.payload.schoolTypes).toBeUndefined();
+    expect(result.payload.gradeLevels).toBeUndefined();
+    expect(result.payload.ekwFachrichtung).toBeUndefined();
+    expect(result.evidence.schoolTypes).toBeUndefined();
+    expect(result.evidence.gradeLevels).toBeUndefined();
+    expect(result.evidence.ekwFachrichtung).toBeUndefined();
+  });
 });
 
 describe('extractMetadata — LLM output normalization', () => {

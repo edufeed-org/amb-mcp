@@ -173,6 +173,74 @@ describe('llmEnrich', () => {
     expect(props.bibleReferences?.type).toBe('array');
   });
 
+  it('declares the Konfi-Arbeit form fields as explicit payload properties under variant=konfi', async () => {
+    // Konfi extensions need explicit properties for the same reason as EKW —
+    // without them Anthropic falls back to JSON-string serialization of the
+    // entire payload, which breaks downstream parsing on typographic quotes.
+    const { client, calls } = stubClient({ payload: {}, evidence: {} });
+    await llmEnrich({
+      client,
+      variant: 'konfi',
+      page: { ogTags: {}, readableText: 'x' },
+      vocabs: {}
+    });
+    const params = calls[0] as {
+      tools: Array<{
+        name: string;
+        input_schema: {
+          properties: {
+            payload: {
+              properties?: Record<string, { type?: string }>;
+            };
+          };
+        };
+      }>;
+    };
+    const tool = params.tools.find((t) => t.name === 'submit_form_payload');
+    const props = tool!.input_schema.properties.payload.properties ?? {};
+
+    // All 11 Konfi vocab fields
+    expect(props.konfiZielgruppen?.type).toBe('array');
+    expect(props.konfiLernformat?.type).toBe('array');
+    expect(props.konfiZeitstruktur?.type).toBe('array');
+    expect(props.konfiBeteiligte?.type).toBe('array');
+    expect(props.konfiThemen?.type).toBe('array');
+    expect(props.konfiDimensionen?.type).toBe('array');
+    expect(props.konfiMethode?.type).toBe('array');
+    expect(props.konfiMaterialaufwand?.type).toBe('array');
+    expect(props.konfiTechnikbedarf?.type).toBe('array');
+    expect(props.konfiLernorte?.type).toBe('array');
+    expect(props.landeskirchen?.type).toBe('array');
+    // 2 Konfi scalars
+    expect(props.plainLanguage?.type).toBe('boolean');
+    expect(props.requiredMaterialsNote?.type).toBe('string');
+    // shared with EKW
+    expect(props.bibleReferences?.type).toBe('array');
+  });
+
+  it('includes Konfi-specific field guidance in the system prompt under variant=konfi', async () => {
+    // Konfi vocabularies overlap semantically (Themen vs Dimensionen, Lernformat
+    // vs Methode) — without explicit guidance the LLM conflates them. Make
+    // sure the prompt names at least the most-confusable fields so the
+    // distinction reaches the model.
+    const { client, calls } = stubClient({ payload: {}, evidence: {} });
+    await llmEnrich({
+      client,
+      variant: 'konfi',
+      page: { ogTags: {}, readableText: 'x' },
+      vocabs: {}
+    });
+    const params = calls[0] as { system: string | Array<{ text?: string }> };
+    const systemText = typeof params.system === 'string'
+      ? params.system
+      : params.system.map((s) => s.text ?? '').join(' ');
+    expect(systemText).toMatch(/konfi/i);
+    expect(systemText).toMatch(/zielgruppen/i);
+    expect(systemText).toMatch(/themen/i);
+    expect(systemText).toMatch(/dimensionen/i);
+    expect(systemText).toMatch(/lernformat/i);
+  });
+
   it('instructs the model that evidence must be a verbatim substring of the page in the source language', async () => {
     // Real-world failure: the model produced English meta-commentary like
     // "Content explicitly addresses religious and theological concepts: ..." for a

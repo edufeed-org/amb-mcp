@@ -6,6 +6,9 @@ import type { AnthropicLike } from '../lib/llm.js';
 import { extractPdfText } from '../lib/pdfExtractor.js';
 import { VARIANTS } from '../lib/schema.js';
 
+/** Upper bound on sources per extraction — keeps the combined LLM payload sane. */
+const MAX_SOURCE_URLS = 10;
+
 /**
  * `extract_metadata` MCP tool.
  *
@@ -34,14 +37,28 @@ export function registerExtractTool(server: McpServer): void {
   server.registerTool(
     'extract_metadata',
     {
-      title: 'Extract AMB/EKW form-prefill metadata from a URL',
+      title: 'Extract AMB/EKW form-prefill metadata from one or more URLs',
       description:
-        'Fetch a public web page and produce a complete AMB/EKW form-prefill payload. ' +
+        'Fetch one or more public web pages and produce a single AMB/EKW form-prefill payload. ' +
         'Returns OpenGraph fallback by default; with ANTHROPIC_API_KEY set, an LLM ' +
         'grounded in the configured SKOS vocabularies fills SKOS-typed fields with ' +
-        'concept IDs and per-field evidence quotes.',
+        'concept IDs and per-field evidence quotes. Pass `urls` to ground the ' +
+        'extraction in several documents at once (e.g. multiple uploaded PDFs).',
       inputSchema: {
-        url: z.string().url().describe('Public http(s) URL of the page to extract.'),
+        url: z
+          .string()
+          .url()
+          .optional()
+          .describe('Public http(s) URL of the page to extract. Use `urls` for multiple sources.'),
+        urls: z
+          .array(z.string().url())
+          .min(1)
+          .max(MAX_SOURCE_URLS)
+          .optional()
+          .describe(
+            'Public http(s) URLs to extract from together. Their texts are merged into one ' +
+              'LLM call so the payload reflects all sources. Provide either `url` or `urls`.'
+          ),
         variant: z
           .enum(VARIANTS)
           .optional()
@@ -59,6 +76,11 @@ export function registerExtractTool(server: McpServer): void {
       }
     },
     async (params) => {
+      const urls = params.urls ?? (params.url ? [params.url] : []);
+      if (urls.length === 0) {
+        throw new Error('extract_metadata requires `url` or a non-empty `urls` array.');
+      }
+
       const apiKey = process.env.ANTHROPIC_API_KEY;
       const llmClient = apiKey
         ? (new Anthropic({ apiKey }) as unknown as AnthropicLike)
@@ -74,7 +96,7 @@ export function registerExtractTool(server: McpServer): void {
         .filter(Boolean);
 
       const result = await extractMetadata({
-        url: params.url,
+        urls,
         variant: params.variant ?? 'amb',
         skosSchemes: params.skosSchemes ?? defaultSchemesFromEnv(),
         llmClient,

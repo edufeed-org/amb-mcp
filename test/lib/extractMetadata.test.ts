@@ -628,6 +628,87 @@ describe('extractMetadata — canonical prefLabel enrichment', () => {
   });
 });
 
+describe('extractMetadata — multi-source concatenation', () => {
+  /** Fake fetch that returns distinct body text per URL. */
+  const fakeHtmlByUrl = async (input: string | URL): Promise<Response> => {
+    const u = String(input);
+    const body = u.includes('/a') ? 'ALPHA-CONTENT' : 'BETA-CONTENT';
+    return new Response(
+      `<html><head><title>doc</title></head><body><p>${body}</p></body></html>`,
+      { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }
+    );
+  };
+
+  it('merges multiple source pages into a single LLM call with provenance markers', async () => {
+    const llmClient = stubLlm({ name: 'Combined' }, { name: 'ev' });
+
+    const result = await extractMetadata({
+      urls: ['https://example.com/a', 'https://example.com/b'],
+      variant: 'amb',
+      fetchFn: fakeHtmlByUrl,
+      llmClient,
+      skosSchemes: {}
+    });
+
+    expect(result.source).toBe('llm-enriched');
+    expect(llmClient.messages.create).toHaveBeenCalledOnce();
+    const sent = JSON.stringify(
+      (llmClient.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    );
+    expect(sent).toContain('ALPHA-CONTENT');
+    expect(sent).toContain('BETA-CONTENT');
+    expect(sent).toContain('Source 1');
+    expect(sent).toContain('Source 2');
+    expect(sent).toContain('https://example.com/a');
+    expect(sent).toContain('https://example.com/b');
+  });
+
+  it('skips the AMB short-circuit for multiple sources even if the first has AMB JSON-LD', async () => {
+    const ld = JSON.stringify({ '@type': ['LearningResource'], name: 'First doc' });
+    const fetchFn = async (input: string | URL): Promise<Response> => {
+      const u = String(input);
+      const html = u.includes('/a')
+        ? `<html><head><script type="application/ld+json">${ld}</script></head><body><p>A</p></body></html>`
+        : `<html><head><title>doc</title></head><body><p>B</p></body></html>`;
+      return new Response(html, {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' }
+      });
+    };
+    const llmClient = stubLlm({ name: 'Combined' }, { name: 'ev' });
+
+    const result = await extractMetadata({
+      urls: ['https://example.com/a', 'https://example.com/b'],
+      variant: 'amb',
+      fetchFn,
+      llmClient,
+      skosSchemes: {}
+    });
+
+    expect(result.source).toBe('llm-enriched');
+    expect(llmClient.messages.create).toHaveBeenCalledOnce();
+  });
+
+  it('keeps single-URL behavior byte-for-byte (no provenance markers)', async () => {
+    const html = `<html><head><title>solo</title></head><body><p>SOLO-CONTENT</p></body></html>`;
+    const llmClient = stubLlm({ name: 'Solo' }, { name: 'ev' });
+
+    await extractMetadata({
+      urls: ['https://example.com/solo'],
+      variant: 'amb',
+      fetchFn: fakeHtml(html),
+      llmClient,
+      skosSchemes: {}
+    });
+
+    const sent = JSON.stringify(
+      (llmClient.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    );
+    expect(sent).toContain('SOLO-CONTENT');
+    expect(sent).not.toContain('Source 1');
+  });
+});
+
 describe('extractMetadata — output shape', () => {
   it('passes extractMetadataResult zod validation in all three modes', async () => {
     const { extractMetadataResult } = await import('../../src/lib/schema.js');

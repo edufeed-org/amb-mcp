@@ -26,7 +26,16 @@ import { formPayload, type Variant, type ExtractMetadataResult } from './schema.
  */
 
 export interface ExtractMetadataInput {
-  url: string;
+  /** Single source URL. Provide this or `urls`; `urls` wins when both are set. */
+  url?: string;
+  /**
+   * Multiple source URLs. Their readable texts are concatenated (with
+   * provenance markers) into ONE LLM call so the payload reflects every
+   * source. The AMB short-circuit is skipped for multi-source extractions
+   * (it has single-document semantics); the OG baseline derives from the
+   * first source.
+   */
+  urls?: string[];
   variant: Variant;
   /**
    * Map of form-field name → SKOS scheme URI. Used to load vocab
@@ -249,19 +258,61 @@ function applyVariantSchema(
   return out;
 }
 
+/**
+ * Upper bound on the combined readable text handed to the LLM across all
+ * sources. `llm.ts` sends `readableText` whole and uncached, so a runaway
+ * multi-PDF batch would blow the token budget. Generous enough for a handful
+ * of documents; later sources are truncated past this point.
+ */
+const MAX_COMBINED_TEXT_CHARS = 600_000;
+
+/**
+ * Concatenate the readable texts of multiple sources into one string with
+ * `=== Source N: URL ===` provenance markers, capped at
+ * MAX_COMBINED_TEXT_CHARS so the LLM payload stays bounded.
+ */
+function combineReadableTexts(
+  urls: string[],
+  pages: FetchPageResult[]
+): string {
+  const parts: string[] = [];
+  let used = 0;
+  for (let i = 0; i < pages.length; i++) {
+    const header = `=== Source ${i + 1}: ${urls[i]} ===\n`;
+    const remaining = MAX_COMBINED_TEXT_CHARS - used;
+    if (remaining <= header.length) break;
+    const body = (pages[i].readableText ?? '').slice(0, remaining - header.length);
+    const block = header + body;
+    parts.push(block);
+    used += block.length + 2; // +2 for the join separator
+  }
+  return parts.join('\n\n');
+}
+
 export async function extractMetadata(
   input: ExtractMetadataInput
 ): Promise<ExtractMetadataResult> {
-  const { url, variant, skosSchemes = {}, vocabRelays, fetchFn, pdfExtract, llmClient, llmModel } = input;
+  const { url, urls, variant, skosSchemes = {}, vocabRelays, fetchFn, pdfExtract, llmClient, llmModel } = input;
 
-  const page = await fetchPage({ url, fetchFn, pdfExtract });
+  const sourceUrls = urls ?? (url ? [url] : []);
+  if (sourceUrls.length === 0) {
+    throw new Error('extractMetadata requires `url` or a non-empty `urls` array.');
+  }
+  const isMulti = sourceUrls.length > 1;
+
+  const pages = await Promise.all(
+    sourceUrls.map((u) => fetchPage({ url: u, fetchFn, pdfExtract }))
+  );
+  // The first source is authoritative for the OG/AMB baseline and the
+  // title/description/ogTags handed to the LLM.
+  const page = pages[0];
   const baseline = {
     og: Object.keys(page.ogTags).length > 0 ? page.ogTags : undefined,
     amb: page.ambJsonLd as Record<string, unknown> | undefined
   };
 
-  // 1. AMB short-circuit
-  if (page.ambJsonLd && typeof page.ambJsonLd === 'object') {
+  // 1. AMB short-circuit — single-document semantics only.
+  if (!isMulti && page.ambJsonLd && typeof page.ambJsonLd === 'object') {
     return {
       source: 'amb-jsonld',
       payload: page.ambJsonLd as Record<string, unknown>,
@@ -284,6 +335,12 @@ export async function extractMetadata(
   const snapshots = await loadVocabSnapshots(skosSchemes, vocabRelays);
   const vocabMaps = vocabMapsFromSnapshots(skosSchemes, snapshots);
 
+  // Single source keeps its readable text verbatim (behavior unchanged);
+  // multiple sources are merged with provenance markers.
+  const readableText = isMulti
+    ? combineReadableTexts(sourceUrls, pages)
+    : page.readableText;
+
   const llmRes = await llmEnrich({
     client: llmClient,
     variant,
@@ -292,7 +349,7 @@ export async function extractMetadata(
       description: page.description,
       ogTags: page.ogTags,
       jsonLdPartial: page.jsonLd,
-      readableText: page.readableText
+      readableText
     },
     vocabs: snapshots,
     ...(llmModel ? { model: llmModel } : {})

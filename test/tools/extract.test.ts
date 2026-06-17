@@ -44,4 +44,26 @@ describe('extract_metadata tool input schema', () => {
     const schema = captureInputSchema();
     expect(schema.variant.safeParse('xyz').success).toBe(false);
   });
+
+  it('accepts a urls array of http(s) URLs', () => {
+    const schema = captureInputSchema();
+    expect(
+      schema.urls.safeParse(['https://a.example/x.pdf', 'https://b.example/y.pdf']).success
+    ).toBe(true);
+  });
+
+  it('rejects a urls array containing a non-URL', () => {
+    const schema = captureInputSchema();
+    expect(schema.urls.safeParse(['not a url']).success).toBe(false);
+  });
+
+  it('rejects an empty urls array', () => {
+    const schema = captureInputSchema();
+    expect(schema.urls.safeParse([]).success).toBe(false);
+  });
+
+  it('makes the single url optional (urls[] may be used instead)', () => {
+    const schema = captureInputSchema();
+    expect(schema.url.safeParse(undefined).success).toBe(true);
+  });
 });

@@ -21,6 +21,7 @@ import { registerPublishTools } from './publish.js';
 import { registerAuthorTools } from './authors.js';
 import { registerCalendarTools } from './calendar.js';
 import { registerExtractTool } from './extract.js';
+import { registerSearchContentTool } from './searchContent.js';
 
 /**
  * Register all MCP tools with the server
@@ -32,6 +33,7 @@ export function registerTools(
 ): void {
   // Query tools
   registerSearchTool(server, client);
+  registerSearchContentTool(server, client);
   registerGetTool(server, client);
   registerBrowseSubjectsTool(server, client);
   registerBrowseResourceTypesTool(server, client);

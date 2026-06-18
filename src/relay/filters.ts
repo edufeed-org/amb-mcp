@@ -1,4 +1,6 @@
 import type { Filter } from 'nostr-tools';
+import type { ContentType } from '../content/types.js';
+import { SNIPPET_KIND } from '../content/snippet.js';
 
 /**
  * Parameters for searching AMB resources
@@ -127,4 +129,42 @@ function escapeSearchValue(value: string): string {
   // If value contains spaces, it might need special handling
   // For now, we pass through as-is since Typesense handles this
   return value;
+}
+
+const CONTENT_TYPE_KINDS: Record<ContentType, number> = {
+  resource: 30142,
+  article: 30023,
+  wiki: 30818,
+};
+
+export interface ContentSearchParams {
+  /** Free-text topic (NIP-50 search). */
+  query?: string;
+  /** Content types to include; defaults to all. */
+  types?: ContentType[];
+  since?: number;
+  until?: number;
+  authors?: string[];
+  limit?: number;
+}
+
+/**
+ * Build a multi-kind NIP-50 filter for cross-content search. The 21142
+ * snippet kind is always added so the relay attaches matched passages; the
+ * tool partitions those out of the result stream.
+ */
+export function buildContentFilter(params: ContentSearchParams): Filter {
+  const limit = Math.min(Math.max(params.limit ?? 20, 1), 250);
+  const types: ContentType[] = params.types?.length
+    ? params.types
+    : (['resource', 'article', 'wiki'] as ContentType[]);
+  const kinds = types.map((t) => CONTENT_TYPE_KINDS[t]);
+  kinds.push(SNIPPET_KIND);
+
+  const filter: Filter = { kinds, limit };
+  if (params.query?.trim()) filter.search = params.query.trim();
+  if (params.since !== undefined) filter.since = params.since;
+  if (params.until !== undefined) filter.until = params.until;
+  if (params.authors?.length) filter.authors = params.authors;
+  return filter;
 }

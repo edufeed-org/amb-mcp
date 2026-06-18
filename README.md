@@ -5,6 +5,8 @@ An MCP (Model Context Protocol) server for querying educational resources from A
 ## Features
 
 ### Query & Browse
+- Cross-content full-text search (`search_content`) across educational resources, long-form articles, and wikis in one ranked call
+- Semantic snippet passages from chunk re-ranking surfaced per result when the relay's re-ranking is active
 - Full-text search with NIP-50
 - Filter by publisher, creator, subject, resource type, educational level
 - Browse available subjects, resource types, and educational levels
@@ -139,6 +141,27 @@ It speaks the same streamable-HTTP protocol as the local server, requires `Autho
 
 ## Available Tools
 
+### search_content
+
+Topic search across **all** content types in one ranked call — educational
+resources (30142), long-form articles (30023), and wikis (30818). Results are
+interleaved and ranked by semantic passage match; each carries the matched
+passage (`snippet`) when the relay's chunk re-ranking is active. This is the
+default entry point for natural-language questions.
+
+Parameters:
+| Name | Type | Description |
+|------|------|-------------|
+| `query` | string | Free-text topic |
+| `types` | string[] | Subset of `["resource","article","wiki"]` (default: all) |
+| `language` | string | Label language (default `de`) |
+| `since` / `until` | number | Unix timestamp bounds |
+| `authors` | string[] | Author pubkeys (hex) |
+| `limit` | number | Max results, 1-250 (default 20) |
+
+Each result: `{ type, kind, title, url?, naddr?, snippet?, score?, ...type-specific }`.
+For upcoming events on the same topic, follow up with `search_calendar_events`.
+
 ### search_resources
 
 Search for educational resources using full-text search and metadata filters.
@@ -188,6 +211,30 @@ List available educational levels (Primary, Secondary, Higher Education, etc.).
 ### relay_stats
 
 Get relay information including name, description, and supported NIPs.
+
+### search_calendar_events
+
+Search for NIP-52 calendar events (date-based 31922, time-based 31923). Supports
+temporal filters, geohash location filtering, and hashtag filtering.
+
+Parameters:
+| Name | Type | Description |
+|------|------|-------------|
+| `query` | string | Free-text topic. **Caveat:** when combined with time/geo range filters the relay prioritises the range server-side and ignores this field — for "events about X next week" pass the time range and filter returned events by topic client-side. |
+| `startAfter` / `startBefore` | number | Unix timestamp bounds for event start |
+| `endAfter` / `endBefore` | number | Unix timestamp bounds for event end |
+| `geohash` | string | Geohash prefix for location-based search |
+| `hashtags` | string[] | Filter by hashtags |
+| `authors` | string[] | Author pubkeys (hex) |
+| `kinds` | number[] | Event kinds to query (default: `[31922, 31923]`) |
+| `since` / `until` | number | Unix timestamp bounds on event creation time |
+| `limit` | number | Max results, 1-250 (default 20) |
+
+### list_calendar_authors
+
+List known calendar event authors loaded from configured follow sets (NIP-51 kind 30000).
+Returns author names, pubkeys, and NIP-05 identifiers. Use the returned pubkeys with
+`search_calendar_events(authors: [...])` to filter events by author.
 
 ---
 

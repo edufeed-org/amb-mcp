@@ -35,6 +35,27 @@ describe('runContentSearch', () => {
     expect(out.results.some((r) => (r as { kind: number }).kind === 21142)).toBe(false);
   });
 
+  it('keeps result↔snippet alignment when an invalid content event is dropped mid-list', async () => {
+    // A name-less 30142 is skipped by the transform. The parallel-array
+    // attachment must still pair the trailing wiki with its own snippet, not
+    // shift onto the dropped event's index.
+    const article = evt(30023, 'art1', [['d', 'a'], ['title', 'Aufmerksamkeit']], 'body a');
+    const artSnip = evt(21142, 'snip-art1', [['e', 'art1'], ['k', '30023'], ['score', '0.81']], 'passage A');
+    const badResource = evt(30142, 'bad1', [['d', 'r']]); // missing name → dropped
+    const wiki = evt(30818, 'wiki1', [['d', 'w'], ['title', 'Seminar']], 'body w');
+    const wikiSnip = evt(21142, 'snip-wiki1', [['e', 'wiki1'], ['k', '30818'], ['score', '0.66']], 'passage W');
+
+    const out = await runContentSearch(
+      fakeClient([article, artSnip, badResource, wiki, wikiSnip]),
+      { query: 'aufmerksamkeit', language: 'de' }
+    );
+
+    expect(out.total).toBe(2);
+    expect(out.results.map((r) => r.type)).toEqual(['article', 'wiki']);
+    expect(out.results[0].snippet).toBe('passage A');
+    expect(out.results[1].snippet).toBe('passage W');
+  });
+
   it('returns an empty result set when the relay returns nothing', async () => {
     const out = await runContentSearch(fakeClient([]), { query: 'x' });
     expect(out).toEqual({ total: 0, results: [] });

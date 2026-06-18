@@ -125,6 +125,22 @@ describe('transformContentEvent — resource (30142)', () => {
     expect(r!.title).toBe('Mathe Video');
     expect((r as any).description).toBe('Ein Video');
   });
+
+  it('surfaces resource publisher/creator distinct from the event signer', () => {
+    const e = evt(30142, [
+      ['d', 'res-2'],
+      ['name', 'Friedensbildung in Schule und Gemeinde'],
+      ['publisher:name', 'ptz Stuttgart'],
+      ['publisher:type', 'Organization'],
+    ]);
+    const r = transformContentEvent(e, 'de');
+    expect(r!.type).toBe('resource');
+    expect((r as any).publisher).toEqual([{ name: 'ptz Stuttgart', type: 'Organization' }]);
+    // No creator tags → empty array (mirrors get_resource output).
+    expect((r as any).creator).toEqual([]);
+    // The event signer is the uploader, NOT the publisher.
+    expect(r!.eventAuthor.pubkey).toBe('a'.repeat(64));
+  });
 });
 
 describe('transformContentEvent — unknown kind', () => {

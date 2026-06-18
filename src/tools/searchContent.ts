@@ -52,6 +52,11 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
         'and each carries the matched passage ("snippet") when available — use it to ' +
         'answer the user, not just list links. This is the default tool for ' +
         'natural-language questions like "what can I do about inattentive students?". ' +
+        'Each result carries eventAuthor (the Nostr signer who uploaded the ' +
+        'event — often an aggregator) plus, for resources, creator/publisher ' +
+        '(who actually made and published the resource); these can differ, so ' +
+        'do not treat eventAuthor as the publisher. For full metadata (license, ' +
+        'dates, complete entity lists) pass a result\'s naddr to get_resource. ' +
         'For upcoming events on the same topic, follow up with search_calendar_events.',
       inputSchema: {
         query: z

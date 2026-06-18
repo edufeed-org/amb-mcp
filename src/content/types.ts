@@ -29,6 +29,10 @@ export interface ResourceResult extends ContentResultBase {
   about?: string[];
   learningResourceType?: string[];
   educationalLevel?: string[];
+  /** Resource creator(s) from AMB metadata — who made the resource. */
+  creator?: Array<{ name: string; type: string }>;
+  /** Resource publisher(s) from AMB metadata — who published it. Distinct from eventAuthor. */
+  publisher?: Array<{ name: string; type: string }>;
 }
 
 export interface ArticleResult extends ContentResultBase {

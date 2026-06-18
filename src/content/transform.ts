@@ -51,6 +51,8 @@ function resourceToContentResult(event: NostrEvent, language: string): ResourceR
     about: s.about,
     learningResourceType: s.learningResourceType,
     educationalLevel: s.educationalLevel,
+    creator: s.creator,
+    publisher: s.publisher,
     eventAuthor: eventAuthor(event.pubkey),
     createdAt: event.created_at,
   };

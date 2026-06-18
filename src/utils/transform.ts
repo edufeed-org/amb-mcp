@@ -13,6 +13,25 @@ import { getLabel } from '../skos/parser.js';
 const EDUFEED_APP_BASE_URL = process.env.EDUFEED_APP_BASE_URL?.replace(/\/+$/, '') || undefined;
 
 /**
+ * Encode a NIP-19 naddr for an addressable event and, when
+ * EDUFEED_APP_BASE_URL is configured, a frontend URL pointing at it.
+ * Both fields are omitted on encoding failure (malformed pubkey, etc.).
+ */
+export function encodeNaddrAndUrl(
+  kind: number,
+  pubkey: string,
+  dTag: string
+): { naddr?: string; url?: string } {
+  try {
+    const naddr = nip19.naddrEncode({ kind, pubkey, identifier: dTag, relays: [] });
+    const url = EDUFEED_APP_BASE_URL ? `${EDUFEED_APP_BASE_URL}/${naddr}` : undefined;
+    return { naddr, url };
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Get a tag value by name
  */
 function getTag(event: NostrEvent, name: string): string | undefined {
@@ -183,21 +202,7 @@ export function toSimplifiedResource(ambResource: AMBResourceWithMetadata, langu
   // EDUFEED_APP_BASE_URL is configured. Both are optional in the response —
   // if encoding fails or the env var is unset, callers still get a usable
   // result without the link fields.
-  let naddr: string | undefined;
-  let url: string | undefined;
-  try {
-    naddr = nip19.naddrEncode({
-      kind: nostr.kind,
-      pubkey: nostr.pubkey,
-      identifier: nostr.dTag,
-      relays: [],
-    });
-    if (EDUFEED_APP_BASE_URL) {
-      url = `${EDUFEED_APP_BASE_URL}/${naddr}`;
-    }
-  } catch {
-    // Leave naddr/url undefined on encoding failure (malformed pubkey, etc.)
-  }
+  const { naddr, url } = encodeNaddrAndUrl(nostr.kind, nostr.pubkey, nostr.dTag);
 
   return {
     id: resource.id,

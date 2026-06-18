@@ -20,7 +20,7 @@ function contentEvent(id: string): NostrEvent {
 }
 
 function articleResult(): ArticleResult {
-  return { type: 'article', kind: 30023, title: 'T', author: { pubkey: 'pk' }, createdAt: 1 };
+  return { type: 'article', kind: 30023, title: 'T', eventAuthor: { pubkey: 'pk' }, createdAt: 1 };
 }
 
 describe('parseSnippets', () => {

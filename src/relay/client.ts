@@ -92,6 +92,16 @@ export class AMBRelayClient {
   }
 
   /**
+   * Search the relay's kind-0 author-profile index (NIP-50) by name.
+   * Routes through the generic queryEvents path; the hardcoded kinds:[30142]
+   * methods above are unaffected.
+   */
+  async searchProfiles(name: string, limit?: number): Promise<NostrEvent[]> {
+    const bounded = Math.min(Math.max(limit ?? 10, 1), 25);
+    return this.queryEvents({ kinds: [0], search: name, limit: bounded });
+  }
+
+  /**
    * Get a single event by its ID
    */
   async getById(eventId: string): Promise<NostrEvent | null> {

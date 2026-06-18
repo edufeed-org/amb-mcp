@@ -19,6 +19,7 @@ import { registerSKOSBuilderTools } from './skos-builder.js';
 import { registerSignerTools } from './signer.js';
 import { registerPublishTools } from './publish.js';
 import { registerAuthorTools } from './authors.js';
+import { registerResolveAuthorTool } from './resolveAuthor.js';
 import { registerCalendarTools } from './calendar.js';
 import { registerExtractTool } from './extract.js';
 import { registerSearchContentTool } from './searchContent.js';
@@ -56,6 +57,7 @@ export function registerTools(
 
   // Author directory tools
   registerAuthorTools(server);
+  registerResolveAuthorTool(server, client);
 
   // Calendar tools
   if (calendarClient) {

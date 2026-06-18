@@ -29,6 +29,8 @@ export interface CalendarSearchParams {
   until?: number;
   /** Maximum number of results (1-250, default: 20) */
   limit?: number;
+  /** Free-text topic (NIP-50 search on the calendar collection). */
+  query?: string;
 }
 
 /**
@@ -42,6 +44,10 @@ export function buildCalendarFilter(params: CalendarSearchParams): Filter {
   const kinds = params.kinds ?? [31922, 31923];
 
   const filter: Filter = { kinds, limit };
+
+  if (params.query?.trim()) {
+    filter.search = params.query.trim();
+  }
 
   if (params.authors?.length) {
     filter.authors = params.authors;

@@ -91,4 +91,15 @@ describe('buildCalendarFilter', () => {
     expect((filter as Record<string, unknown>)['#g']).toBeUndefined();
     expect(filter['#t']).toBeUndefined();
   });
+
+  it('sets the NIP-50 search string from query', () => {
+    const filter = buildCalendarFilter({ query: 'mathematik' });
+    expect(filter.search).toBe('mathematik');
+  });
+
+  it('keeps range params and search together (relay decides precedence)', () => {
+    const filter = buildCalendarFilter({ query: 'mathe', startAfter: 100 });
+    expect(filter.search).toBe('mathe');
+    expect((filter as Record<string, unknown>)['#start_after']).toEqual(['100']);
+  });
 });

@@ -21,6 +21,15 @@ export function registerCalendarTools(
         'Supports temporal filters (start/end time ranges), geohash location filtering, and hashtag filtering. ' +
         'Returns events from the configured calendar relay.',
       inputSchema: {
+        query: z
+          .string()
+          .optional()
+          .describe(
+            'Free-text topic for the events. NOTE: when combined with time/geo ' +
+              'filters, the relay prioritises the time/geo range and ignores this ' +
+              'search server-side — for "events about X next week", pass the time ' +
+              'range and filter the returned events by topic on the client.'
+          ),
         startAfter: z
           .number()
           .optional()
@@ -82,6 +91,7 @@ export function registerCalendarTools(
     },
     async (params) => {
       const filter = buildCalendarFilter({
+        query: params.query,
         startAfter: params.startAfter,
         startBefore: params.startBefore,
         endAfter: params.endAfter,

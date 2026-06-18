@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AMBRelayClient } from '../relay/client.js';
 import { buildContentFilter, type ContentSearchParams } from '../relay/filters.js';
-import { transformContentEvents } from '../content/transform.js';
+import { transformContentEvent } from '../content/transform.js';
 import { parseSnippets, attachSnippets, SNIPPET_KIND } from '../content/snippet.js';
 import type { SimplifiedContentResult } from '../content/types.js';
 
@@ -19,13 +19,21 @@ export async function runContentSearch(
   const filter = buildContentFilter(params);
   const events = await client.queryEvents(filter);
 
-  const contentEvents = events.filter((e) => e.kind !== SNIPPET_KIND);
   const snippetEvents = events.filter((e) => e.kind === SNIPPET_KIND);
 
-  const results = transformContentEvents(contentEvents, language);
-  // transformContentEvents preserves order and skips invalid events. Rebuild
-  // the parallel event list so result[i] ↔ event[i] for snippet attachment.
-  const keptEvents = contentEvents.filter((e) => transformContentEvents([e], language).length > 0);
+  // One pass: transform in relay order, skipping invalid events, and keep the
+  // surviving source events in lock-step so result[i] ↔ keptEvents[i] for
+  // snippet attachment.
+  const results: SimplifiedContentResult[] = [];
+  const keptEvents = [];
+  for (const e of events) {
+    if (e.kind === SNIPPET_KIND) continue;
+    const r = transformContentEvent(e, language);
+    if (r) {
+      results.push(r);
+      keptEvents.push(e);
+    }
+  }
   const snippets = parseSnippets(snippetEvents);
   attachSnippets(results, keptEvents, snippets);
 

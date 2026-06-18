@@ -61,7 +61,8 @@ A single tool issuing **one** subscription with `kinds:[30142,30023,30818,21142]
   { "type": "resource", "kind": 30142, "title": "...", "description": "...",
     "snippet": "...matched passage...", "score": 0.82,
     "url": "https://app…/<naddr>", "naddr": "...",
-    "author": { "pubkey": "...", "name": "..." }, "createdAt": 0,
+    "author": { "pubkey": "..." }, "createdAt": 0,
+    /* author carries only pubkey — relay events have no reliable display name */
     /* 30142-specific resolved labels: about, learningResourceType, educationalLevel */ },
   { "type": "article", "kind": 30023, "title": "...", "summary": "...",
     "excerpt": "...", "snippet": "...", "score": 0.79, "url": "...", "naddr": "...",

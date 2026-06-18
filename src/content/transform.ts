@@ -113,9 +113,6 @@ const CONTENT_TRANSFORMS: Record<
   30818: (event) => wikiToContentResult(event),
 };
 
-/** Content kinds this MCP understands (excludes the 21142 snippet kind). */
-export const CONTENT_KINDS = Object.keys(CONTENT_TRANSFORMS).map(Number);
-
 export function transformContentEvent(
   event: NostrEvent,
   language = 'de'

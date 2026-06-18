@@ -37,7 +37,20 @@ maps names→pubkeys and composes the calendar REQ").
 
 `list_known_authors` stays as-is (curated directory) and `resolve_author` is
 added as a **separate** tool — they answer different questions (a hand-curated
-directory vs. a dynamic index lookup).
+directory vs. a dynamic index lookup). To keep them consistent for the LLM,
+`resolve_author`'s candidates reuse the same field shape as
+`list_known_authors`' `KnownAuthor` (`{pubkey, name?, nip05?, about?}`), plus
+an `npub`.
+
+## Reuse map (DRY)
+
+| Need | Reuse | Source |
+|------|-------|--------|
+| Parse kind-0 `content` → `{name, display_name, nip05, about}` | `getProfileContent(event): ProfileContent \| undefined` (returns `undefined` on bad JSON — no manual try/catch) | `applesauce-core/helpers` (already used in `src/authors.ts:135`) |
+| `ProfileContent` type | reuse | `applesauce-core/helpers` |
+| `npub` encode | `nip19.npubEncode` (already used in `authors.ts`) | `nostr-tools` |
+| Arbitrary-filter relay query | `AMBRelayClient.queryEvents(filter)` (used by calendar + content search) | `src/relay/client.ts` |
+| Candidate output shape | mirror `KnownAuthor` (`name = display_name \|\| name`) | `src/authors.ts` |
 
 ## Architecture
 
@@ -46,31 +59,30 @@ Three small additions, mirroring the existing `search_content` slice
 `AMB_RELAYS` and relay `PROFILES_ENABLED` already satisfied).
 
 1. **`src/relay/client.ts` — add `searchProfiles(name, limit)`.** A thin method
-   that builds `{ kinds:[0], search: name, limit }` and delegates to the
-   existing `queryEvents(filter)`. The hardcoded `kinds:[30142]` methods are
-   left untouched (back-compat; profiles route through the generic path that
-   already works against the dev relay).
+   that builds `{ kinds:[0], search: name, limit: clamp(limit ?? 10, 1, 25) }`
+   and delegates to the existing `queryEvents(filter)`. The hardcoded
+   `kinds:[30142]` methods are left untouched (back-compat; profiles route
+   through the generic path that already works against the dev relay).
 2. **`src/profiles/transform.ts` — `transformProfileEvent(event)`.** A pure
-   function: kind-0 `nostr.Event` → `ProfileResult` or `null`. Parses the
-   JSON `content`, reads `name`, `display_name` **or** `displayName`, `about`,
-   `nip05`; encodes `npub` from the pubkey. Returns `null` for non-kind-0
-   input or malformed JSON.
+   function: kind-0 `NostrEvent` → `ProfileResult` or `null`. Delegates parsing
+   to `getProfileContent` (DRY); encodes `npub` via `nip19.npubEncode`.
+   The `ProfileResult` type is co-located in this file (one type — no separate
+   `types.ts`; KISS).
 3. **`src/tools/resolveAuthor.ts` — `resolve_author` MCP tool.** Calls
-   `searchProfiles`, transforms each event (skipping nulls), returns ranked
-   candidates in relay arrival order (NIP-50 relevance). Registered in
+   `searchProfiles`, transforms each event (skipping nulls), returns candidates
+   in relay arrival order (NIP-50 relevance). Registered in
    `src/tools/index.ts` next to `registerAuthorTools`.
 
 ## Data types
 
 ```ts
-// src/profiles/types.ts
+// src/profiles/transform.ts  (type co-located with the transform — KISS)
 export interface ProfileResult {
-  pubkey: string;       // hex
-  npub: string;         // NIP-19 encoded
-  name?: string;        // kind-0 "name"
-  displayName?: string; // kind-0 "display_name" or "displayName"
-  about?: string;       // kind-0 "about"
-  nip05?: string;       // kind-0 "nip05"
+  pubkey: string;   // hex
+  npub: string;     // NIP-19 encoded
+  name?: string;    // display_name || name (mirrors KnownAuthor)
+  nip05?: string;
+  about?: string;
 }
 ```
 
@@ -86,10 +98,11 @@ export interface ProfileResult {
 ### `transformProfileEvent(event: NostrEvent): ProfileResult | null`
 
 - `event.kind !== 0` → `null`.
-- `JSON.parse(event.content)` throws → `null` (malformed profile skipped).
-- Maps fields; `displayName = meta.display_name ?? meta.displayName`.
+- `getProfileContent(event)` returns `undefined` (missing/malformed content)
+  → `null`. No manual `JSON.parse`/try-catch (DRY — applesauce owns parsing).
+- `name = content.display_name || content.name` (mirrors `KnownAuthor`).
+- `nip05`, `about` copied from `content`; omitted when absent/empty.
 - `npub = nip19.npubEncode(event.pubkey)`.
-- Optional string fields omitted when absent/empty.
 
 ### `resolve_author` tool
 
@@ -106,7 +119,7 @@ export interface ProfileResult {
 
 ```
 resolve_author("Jörg Lohrer")
-   → { total: 1, candidates: [{ pubkey:"9b…", name:"Jörg Lohrer", … }] }
+   → { total: 1, candidates: [{ pubkey:"9b…", npub:"npub1…", name:"Jörg Lohrer", … }] }
         ↓  (LLM selects top candidate)
 search_content({ authors:["9b…"], types:["resource","article"],
                  since:<now-30d>, limit:20 })
@@ -130,16 +143,21 @@ follow-up.
   `name`) → resolution reflects what the index holds. A synonym/alias layer is
   explicitly out of scope.
 
-## Testing (Vitest, matching existing suite)
+## Testing (Vitest, matching existing suite; TDD — tests first)
 
-- **`transformProfileEvent`** (table-driven): full kind-0 → all fields;
-  `display_name` vs `displayName`; missing optionals omitted; malformed JSON →
-  `null`; non-kind-0 input → `null`; `npub` derived correctly.
+Tests run against the **real** `getProfileContent`/`nip19` (no mocking — they
+are pure), with literal kind-0 event fixtures.
+
+- **`transformProfileEvent`** (table-driven): full kind-0 → all fields, with
+  `name` taken from `display_name` when present and falling back to `name`;
+  missing optionals omitted; malformed `content` → `null`; non-kind-0 input →
+  `null`; `npub` derived correctly via `nip19.npubEncode`.
 - **`searchProfiles`** filter shape: produces `{ kinds:[0], search, limit }`
   with limit clamped to 1–25 (assert against a stubbed `queryEvents`).
-- **`resolve_author` tool**: given a mixed event array (incl. a non-kind-0 and
-  a malformed kind-0), output `candidates` are the valid kind-0 profiles in
-  order, with correct fields; `total` matches.
+- **`resolve_author` tool handler**: given a stubbed `searchProfiles` returning
+  a mixed event array (incl. a non-kind-0 and a malformed kind-0), the parsed
+  tool output has `candidates` = the valid kind-0 profiles in relay order with
+  correct fields, and `total` matches.
 - **Optional live smoke** against `wss://dev.amb-relay.edufeed.org` (profiles
   enabled): `resolve_author("e-teaching")` returns at least one candidate.
 

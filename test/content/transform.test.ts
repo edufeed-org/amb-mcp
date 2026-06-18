@@ -42,7 +42,8 @@ describe('transformContentEvent — article (30023)', () => {
     expect((r as any).publishedAt).toBe(1699990000);
     expect((r as any).topics).toEqual(['didaktik', 'hochschule']);
     expect((r as any).excerpt).toContain('Aufmerksamkeit');
-    expect(r!.author.pubkey).toBe('a'.repeat(64));
+    expect(r!.eventAuthor.pubkey).toBe('a'.repeat(64));
+    expect(r!.eventAuthor.npub).toMatch(/^npub1/);
     expect(r!.createdAt).toBe(1700000000);
   });
 
@@ -101,6 +102,12 @@ describe('transformContentEvent — wiki (30818)', () => {
     expect(r).not.toBeNull();
     expect(r!.type).toBe('wiki');
     expect(r!.title).toBe('d-only-wiki');
+  });
+
+  it('sets eventAuthor.npub for a wiki', () => {
+    const r = transformContentEvent(evt(30818, [['d', 'w'], ['title', 'W']], 'body'), 'de');
+    expect(r!.eventAuthor.pubkey).toBe('a'.repeat(64));
+    expect(r!.eventAuthor.npub).toMatch(/^npub1/);
   });
 });
 

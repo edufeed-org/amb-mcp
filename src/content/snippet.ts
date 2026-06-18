@@ -19,7 +19,8 @@ function tag(event: NostrEvent, name: string): string | undefined {
 
 /**
  * Index kind-21142 snippet events by their parent event id (`e` tag). When a
- * parent has more than one snippet, the higher-scored passage wins.
+ * parent has more than one snippet, the higher-scored passage wins; on an equal
+ * score, the first occurrence is kept.
  */
 export function parseSnippets(events: NostrEvent[]): Map<string, ParsedSnippet> {
   const map = new Map<string, ParsedSnippet>();

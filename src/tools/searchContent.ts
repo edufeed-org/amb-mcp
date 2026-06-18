@@ -15,7 +15,7 @@ export async function runContentSearch(
   client: Pick<AMBRelayClient, 'queryEvents'>,
   params: ContentSearchParams & { language?: string }
 ): Promise<{ total: number; results: SimplifiedContentResult[] }> {
-  const language = params.language || 'de';
+  const language = params.language ?? 'de';
   const filter = buildContentFilter(params);
   const events = await client.queryEvents(filter);
 

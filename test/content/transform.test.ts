@@ -75,6 +75,33 @@ describe('transformContentEvent — wiki (30818)', () => {
   it('returns null when d tag is missing', () => {
     expect(transformContentEvent(evt(30818, [['title', 'No d']]), 'de')).toBeNull();
   });
+
+  it('falls back to summary when title tag is absent', () => {
+    const e = evt(
+      30818,
+      [
+        ['d', 'titleless-wiki'],
+        ['summary', 'A fallback summary'],
+      ],
+      'Some wiki content.'
+    );
+    const r = transformContentEvent(e, 'de');
+    expect(r).not.toBeNull();
+    expect(r!.type).toBe('wiki');
+    expect(r!.title).toBe('A fallback summary');
+  });
+
+  it('falls back to d-tag value when both title and summary are absent', () => {
+    const e = evt(
+      30818,
+      [['d', 'd-only-wiki']],
+      'Content without title or summary.'
+    );
+    const r = transformContentEvent(e, 'de');
+    expect(r).not.toBeNull();
+    expect(r!.type).toBe('wiki');
+    expect(r!.title).toBe('d-only-wiki');
+  });
 });
 
 describe('transformContentEvent — resource (30142)', () => {

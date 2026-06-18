@@ -76,8 +76,11 @@ function articleToContentResult(event: NostrEvent): ArticleResult | null {
 
 function wikiToContentResult(event: NostrEvent): WikiResult | null {
   const d = tag(event, 'd');
-  const title = tag(event, 'title');
-  if (!d || !title) return null;
+  // The relay accepts wiki events with only a `d` tag (title is optional),
+  // so we must not drop title-less wikis — only the d tag is required here.
+  if (!d) return null;
+  // Fall back to summary, then d-tag value so title is always non-empty.
+  const title = tag(event, 'title') ?? tag(event, 'summary') ?? d;
   const { naddr, url } = encodeNaddrAndUrl(event.kind, event.pubkey, d);
   const topics = tagValues(event, 't');
   const result: WikiResult = {

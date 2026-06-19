@@ -7,18 +7,14 @@
  * (Claude.ai connectors, MCP Inspector, custom browser apps) can connect.
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-
-import { AMBRelayClient } from './relay/client.js';
-import { registerTools } from './tools/index.js';
-import { registerResources } from './resources/index.js';
 import {
   loadAuthorSets,
   setAuthorDirectory,
   setCalendarAuthorDirectory,
 } from './authors.js';
 import { startHttpServer } from './transport/http.js';
-import { SERVER_NAME, SERVER_VERSION, SERVER_INSTRUCTIONS } from './server-info.js';
+import { buildSessionServer } from './session.js';
+import { SERVER_NAME, SERVER_VERSION } from './server-info.js';
 
 // Configuration from environment
 const AMB_RELAYS = process.env.AMB_RELAYS?.split(',') || ['wss://relay.edufeed.org'];
@@ -86,21 +82,8 @@ async function main() {
     buildMcpServer: () => {
       // Per-session relay clients: each session starts from the configured
       // defaults and can add/remove relays without affecting other sessions.
-      const server = new McpServer(
-        { name: SERVER_NAME, version: SERVER_VERSION },
-        { instructions: SERVER_INSTRUCTIONS },
-      );
-      const ambClient = new AMBRelayClient(AMB_RELAYS);
-      const calendarClient = new AMBRelayClient(CALENDAR_RELAYS);
-      registerTools(server, ambClient, calendarClient);
-      registerResources(server, ambClient);
-      return {
-        server,
-        dispose: () => {
-          ambClient.close();
-          calendarClient.close();
-        },
-      };
+      const { server, dispose } = buildSessionServer(AMB_RELAYS, CALENDAR_RELAYS);
+      return { server, dispose };
     },
   });
 

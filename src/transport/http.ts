@@ -26,8 +26,12 @@ export interface HttpServerOptions {
   allowedHosts?: string[];
   /** Origin allow-list for DNS-rebinding protection. */
   allowedOrigins?: string[];
-  /** Factory called once per new MCP session to build a fresh server. */
-  buildMcpServer: () => McpServer;
+  /**
+   * Factory called once per new MCP session to build a fresh server.
+   * `dispose` (if returned) is invoked when the session closes, so the
+   * session's relay connections can be torn down.
+   */
+  buildMcpServer: () => { server: McpServer; dispose?: () => void | Promise<void> };
   /** Used in /healthz response. */
   serverName?: string;
   serverVersion?: string;
@@ -108,10 +112,11 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
         allowedHosts,
         allowedOrigins,
       });
+      const { server: mcp, dispose } = buildMcpServer();
       transport.onclose = () => {
         if (transport?.sessionId) transports.delete(transport.sessionId);
+        void dispose?.();
       };
-      const mcp = buildMcpServer();
       await mcp.connect(transport);
     }
 

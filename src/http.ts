@@ -18,9 +18,7 @@ import {
   setCalendarAuthorDirectory,
 } from './authors.js';
 import { startHttpServer } from './transport/http.js';
-
-const SERVER_NAME = 'amb-relay';
-const SERVER_VERSION = '0.1.0';
+import { SERVER_NAME, SERVER_VERSION, SERVER_INSTRUCTIONS } from './server-info.js';
 
 // Configuration from environment
 const AMB_RELAYS = process.env.AMB_RELAYS?.split(',') || ['wss://relay.edufeed.org'];
@@ -48,10 +46,6 @@ async function main() {
   console.log(`Auth: ${HTTP_BEARER_TOKEN ? 'bearer token required' : 'open (no auth)'}`);
   if (HTTP_ALLOWED_HOSTS?.length) console.log(`Allowed hosts: ${HTTP_ALLOWED_HOSTS.join(', ')}`);
   if (HTTP_ALLOWED_ORIGINS?.length) console.log(`Allowed origins: ${HTTP_ALLOWED_ORIGINS.join(', ')}`);
-
-  // Shared relay clients across all sessions.
-  const ambClient = new AMBRelayClient(AMB_RELAYS);
-  const calendarClient = new AMBRelayClient(CALENDAR_RELAYS);
 
   // Load author sets once at startup; setAuthorDirectory mutates module
   // state shared across all sessions.
@@ -90,10 +84,23 @@ async function main() {
     serverName: SERVER_NAME,
     serverVersion: SERVER_VERSION,
     buildMcpServer: () => {
-      const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
+      // Per-session relay clients: each session starts from the configured
+      // defaults and can add/remove relays without affecting other sessions.
+      const server = new McpServer(
+        { name: SERVER_NAME, version: SERVER_VERSION },
+        { instructions: SERVER_INSTRUCTIONS },
+      );
+      const ambClient = new AMBRelayClient(AMB_RELAYS);
+      const calendarClient = new AMBRelayClient(CALENDAR_RELAYS);
       registerTools(server, ambClient, calendarClient);
       registerResources(server, ambClient);
-      return server;
+      return {
+        server,
+        dispose: () => {
+          ambClient.close();
+          calendarClient.close();
+        },
+      };
     },
   });
 
@@ -104,12 +111,12 @@ async function main() {
   const shutdown = async (signal: string) => {
     console.log(`\nReceived ${signal}, shutting down...`);
     try {
+      // Closes all active session transports, each of which disposes its
+      // own relay clients via the onclose hook.
       await handle.close();
     } catch (err) {
       console.error('Error closing HTTP server:', err);
     }
-    ambClient.close();
-    calendarClient.close();
     process.exit(0);
   };
 

@@ -18,6 +18,7 @@ import { AMBRelayClient } from './relay/client.js';
 import { registerTools } from './tools/index.js';
 import { registerResources } from './resources/index.js';
 import { loadAuthorSets, setAuthorDirectory, setCalendarAuthorDirectory } from './authors.js';
+import { SERVER_NAME, SERVER_VERSION, SERVER_INSTRUCTIONS } from './server-info.js';
 
 // Configuration from environment
 const AMB_RELAYS = process.env.AMB_RELAYS?.split(',') || ['wss://relay.edufeed.org'];
@@ -50,10 +51,10 @@ async function main() {
   const calendarClient = new AMBRelayClient(CALENDAR_RELAYS);
 
   // Create MCP server
-  const server = new McpServer({
-    name: 'amb-relay',
-    version: '0.1.0',
-  });
+  const server = new McpServer(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
 
   // Register tools and resources
   registerTools(server, ambClient, calendarClient);

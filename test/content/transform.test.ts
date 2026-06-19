@@ -42,7 +42,8 @@ describe('transformContentEvent — article (30023)', () => {
     expect((r as any).publishedAt).toBe(1699990000);
     expect((r as any).topics).toEqual(['didaktik', 'hochschule']);
     expect((r as any).excerpt).toContain('Aufmerksamkeit');
-    expect(r!.author.pubkey).toBe('a'.repeat(64));
+    expect(r!.eventAuthor.pubkey).toBe('a'.repeat(64));
+    expect(r!.eventAuthor.npub).toMatch(/^npub1/);
     expect(r!.createdAt).toBe(1700000000);
   });
 
@@ -102,6 +103,12 @@ describe('transformContentEvent — wiki (30818)', () => {
     expect(r!.type).toBe('wiki');
     expect(r!.title).toBe('d-only-wiki');
   });
+
+  it('sets eventAuthor.npub for a wiki', () => {
+    const r = transformContentEvent(evt(30818, [['d', 'w'], ['title', 'W']], 'body'), 'de');
+    expect(r!.eventAuthor.pubkey).toBe('a'.repeat(64));
+    expect(r!.eventAuthor.npub).toMatch(/^npub1/);
+  });
 });
 
 describe('transformContentEvent — resource (30142)', () => {
@@ -117,6 +124,22 @@ describe('transformContentEvent — resource (30142)', () => {
     expect(r!.kind).toBe(30142);
     expect(r!.title).toBe('Mathe Video');
     expect((r as any).description).toBe('Ein Video');
+  });
+
+  it('surfaces resource publisher/creator distinct from the event signer', () => {
+    const e = evt(30142, [
+      ['d', 'res-2'],
+      ['name', 'Friedensbildung in Schule und Gemeinde'],
+      ['publisher:name', 'ptz Stuttgart'],
+      ['publisher:type', 'Organization'],
+    ]);
+    const r = transformContentEvent(e, 'de');
+    expect(r!.type).toBe('resource');
+    expect((r as any).publisher).toEqual([{ name: 'ptz Stuttgart', type: 'Organization' }]);
+    // No creator tags → empty array (mirrors get_resource output).
+    expect((r as any).creator).toEqual([]);
+    // The event signer is the uploader, NOT the publisher.
+    expect(r!.eventAuthor.pubkey).toBe('a'.repeat(64));
   });
 });
 

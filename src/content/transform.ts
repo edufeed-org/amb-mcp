@@ -1,4 +1,4 @@
-import type { NostrEvent } from 'nostr-tools';
+import { nip19, type NostrEvent } from 'nostr-tools';
 import {
   eventToAMBResource,
   toSimplifiedResource,
@@ -28,6 +28,15 @@ function excerpt(content: string): string | undefined {
   return text.length > EXCERPT_MAX ? text.slice(0, EXCERPT_MAX) + '…' : text;
 }
 
+/** Build the event-signer descriptor; npub is omitted if the pubkey can't be encoded. */
+function eventAuthor(pubkey: string): { pubkey: string; npub?: string } {
+  try {
+    return { pubkey, npub: nip19.npubEncode(pubkey) };
+  } catch {
+    return { pubkey };
+  }
+}
+
 function resourceToContentResult(event: NostrEvent, language: string): ResourceResult | null {
   const amb = eventToAMBResource(event);
   if (!amb) return null;
@@ -42,7 +51,9 @@ function resourceToContentResult(event: NostrEvent, language: string): ResourceR
     about: s.about,
     learningResourceType: s.learningResourceType,
     educationalLevel: s.educationalLevel,
-    author: { pubkey: event.pubkey },
+    creator: s.creator,
+    publisher: s.publisher,
+    eventAuthor: eventAuthor(event.pubkey),
     createdAt: event.created_at,
   };
 }
@@ -60,7 +71,7 @@ function articleToContentResult(event: NostrEvent): ArticleResult | null {
     title,
     naddr,
     url,
-    author: { pubkey: event.pubkey },
+    eventAuthor: eventAuthor(event.pubkey),
     createdAt: event.created_at,
   };
   const summary = tag(event, 'summary');
@@ -89,7 +100,7 @@ function wikiToContentResult(event: NostrEvent): WikiResult | null {
     title,
     naddr,
     url,
-    author: { pubkey: event.pubkey },
+    eventAuthor: eventAuthor(event.pubkey),
     createdAt: event.created_at,
   };
   const summary = tag(event, 'summary');

@@ -1,7 +1,19 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AMBRelayClient } from '../relay/client.js';
+import { nip19 } from 'nostr-tools';
 import { eventToAMBResource, toSimplifiedResource } from '../utils/transform.js';
+
+/** Decode an naddr into a d-tag + author for getByDTag; null on malformed/non-naddr input. */
+export function naddrToLookup(naddr: string): { identifier: string; author: string } | null {
+  try {
+    const decoded = nip19.decode(naddr);
+    if (decoded.type !== 'naddr') return null;
+    return { identifier: decoded.data.identifier, author: decoded.data.pubkey };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Register the get_resource tool
@@ -12,7 +24,9 @@ export function registerGetTool(server: McpServer, client: AMBRelayClient): void
     {
       title: 'Get Educational Resource',
       description:
-        'Retrieve a single educational resource by its identifier (d-tag) or event ID. Returns the full resource metadata including educational properties.',
+        'Retrieve a single educational resource by naddr (preferred — pass a ' +
+        'search_content result\'s naddr), d-tag identifier, or event ID. Returns ' +
+        'the full resource metadata including creator/publisher and educational properties.',
       inputSchema: {
         identifier: z
           .string()
@@ -26,6 +40,10 @@ export function registerGetTool(server: McpServer, client: AMBRelayClient): void
           .string()
           .optional()
           .describe('Nostr event ID (hex) for direct lookup. Alternative to identifier.'),
+        naddr: z
+          .string()
+          .optional()
+          .describe('NIP-19 naddr from a search result — the preferred handoff to fetch full metadata.'),
         language: z
           .string()
           .optional()
@@ -34,13 +52,13 @@ export function registerGetTool(server: McpServer, client: AMBRelayClient): void
       },
     },
     async (params) => {
-      if (!params.identifier && !params.eventId) {
+      if (!params.identifier && !params.eventId && !params.naddr) {
         return {
           content: [
             {
               type: 'text',
               text: JSON.stringify({
-                error: 'Either identifier or eventId must be provided',
+                error: 'Either identifier, eventId, or naddr must be provided',
                 resource: null,
               }),
             },
@@ -51,6 +69,19 @@ export function registerGetTool(server: McpServer, client: AMBRelayClient): void
       let event;
       if (params.eventId) {
         event = await client.getById(params.eventId);
+      } else if (params.naddr) {
+        const lookup = naddrToLookup(params.naddr);
+        if (!lookup) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ error: 'Invalid naddr', resource: null }),
+              },
+            ],
+          };
+        }
+        event = await client.getByDTag(lookup.identifier, lookup.author);
       } else if (params.identifier) {
         event = await client.getByDTag(params.identifier, params.author);
       }

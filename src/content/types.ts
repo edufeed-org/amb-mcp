@@ -9,7 +9,8 @@ interface ContentResultBase {
   url?: string;
   /** NIP-19 addressable identifier. */
   naddr?: string;
-  author: { pubkey: string };
+  /** The Nostr event signer (uploader/aggregator) — NOT necessarily the resource's creator/publisher. */
+  eventAuthor: { pubkey: string; npub?: string };
   createdAt: number;
   /** Best matching passage from a kind-21142 snippet, when available. */
   snippet?: string;
@@ -28,6 +29,10 @@ export interface ResourceResult extends ContentResultBase {
   about?: string[];
   learningResourceType?: string[];
   educationalLevel?: string[];
+  /** Resource creator(s) from AMB metadata — who made the resource. */
+  creator?: Array<{ name: string; type: string }>;
+  /** Resource publisher(s) from AMB metadata — who published it. Distinct from eventAuthor. */
+  publisher?: Array<{ name: string; type: string }>;
 }
 
 export interface ArticleResult extends ContentResultBase {

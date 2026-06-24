@@ -25,10 +25,12 @@ export function registerCalendarTools(
           .string()
           .optional()
           .describe(
-            'Free-text topic for the events. NOTE: when combined with time/geo ' +
-              'filters, the relay prioritises the time/geo range and ignores this ' +
-              'search server-side — for "events about X next week", pass the time ' +
-              'range and filter the returned events by topic on the client.'
+            'Free-text topic for the events. Combines with a time range ' +
+              '(startAfter/startBefore/endAfter/endBefore) in a single server-side ' +
+              'query — e.g. "events about X in the next week" is one call. ' +
+              'EXCEPTION: a geohash query forces the relay location index, which ' +
+              'ignores this topic; for "events about X near a place" pass the geohash ' +
+              'and filter the returned events by topic on the client.'
           ),
         startAfter: z
           .number()
@@ -71,11 +73,11 @@ export function registerCalendarTools(
           .optional()
           .describe(
             'Return calendar events shared into this community (Communikey). Accepts a hex pubkey ' +
-              'or npub; resolve a community name with resolve_author. LIMITATION: this filter is ' +
-              'silently ignored when combined with a time-range or geo query (startAfter/startBefore/' +
-              'endAfter/endBefore/geohash), because those route to the relay time index which ignores ' +
-              'full-text search. For "events shared with X next week", query by community alone, then ' +
-              'filter the returned events by date client-side.',
+              'or npub; resolve a community name with resolve_author. Combines with a time range ' +
+              '(startAfter/startBefore/endAfter/endBefore) in a single server-side query, so ' +
+              '"events shared with X next week" is one call. EXCEPTION: a geohash query forces the ' +
+              'relay location index, which ignores this community filter; for "shared with X near a ' +
+              'place" pass the geohash and filter the returned events by community client-side.',
           ),
         kinds: z
           .array(z.number())

@@ -35,11 +35,16 @@ export function registerResolveAuthorTool(server: McpServer, client: AMBRelayCli
         'search_calendar_events) to fetch that author\'s content. Returns several ' +
         'candidates ranked by relevance so you can disambiguate. This indexes ' +
         'authors who have published content here — distinct from list_known_authors, ' +
-        'which lists hand-curated follow sets. Also resolves community names: ' +
-        'communities are Nostr profiles (kind-0), so a community name returns its ' +
-        'pubkey alongside people. Feed that pubkey to the `community` param of ' +
-        'search_content or search_calendar_events to get the content shared into ' +
-        'that community. A wrong pick simply yields empty results.',
+        'which lists hand-curated follow sets. NOTE: this resolves only kind-0 ' +
+        'author profiles. It does NOT resolve a community\'s identifying pubkey — a ' +
+        'community is defined by a kind-10222 event and frequently has no kind-0 at ' +
+        'all. To list content shared into a community you need that community pubkey ' +
+        '(a Nostr identifier, e.g. from the community\'s spec/naddr), which you pass ' +
+        'to the `community` param of search_content / search_calendar_events. ' +
+        'resolve_author CAN, however, find a community\'s posting account (e.g. a ' +
+        '"…-Termine-Bot") when that account has a kind-0; querying that pubkey via ' +
+        'authors:[...] returns the content it published. A wrong pick simply yields ' +
+        'empty results.',
       inputSchema: {
         name: z.string().describe('Org or person name to resolve (e.g. "Jörg Lohrer").'),
         limit: z

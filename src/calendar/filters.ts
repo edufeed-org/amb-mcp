@@ -1,4 +1,5 @@
 import type { Filter } from 'nostr-tools';
+import { normalizeCommunityPubkey } from '../utils/community.js';
 
 /**
  * Parameters for searching NIP-52 calendar events.
@@ -31,6 +32,8 @@ export interface CalendarSearchParams {
   limit?: number;
   /** Free-text topic (NIP-50 search on the calendar collection). */
   query?: string;
+  /** Community hex pubkey or npub; appends NIP-50 community:<hex> to the search. */
+  community?: string;
 }
 
 /**
@@ -45,9 +48,10 @@ export function buildCalendarFilter(params: CalendarSearchParams): Filter {
 
   const filter: Filter = { kinds, limit };
 
-  if (params.query?.trim()) {
-    filter.search = params.query.trim();
-  }
+  const searchTerms: string[] = [];
+  if (params.query?.trim()) searchTerms.push(params.query.trim());
+  if (params.community) searchTerms.push(`community:${normalizeCommunityPubkey(params.community)}`);
+  if (searchTerms.length) filter.search = searchTerms.join(' ');
 
   if (params.authors?.length) {
     filter.authors = params.authors;

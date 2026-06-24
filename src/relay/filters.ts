@@ -1,6 +1,7 @@
 import type { Filter } from 'nostr-tools';
 import type { ContentType } from '../content/types.js';
 import { SNIPPET_KIND } from '../content/snippet.js';
+import { normalizeCommunityPubkey } from '../utils/community.js';
 
 /**
  * Parameters for searching AMB resources
@@ -146,6 +147,8 @@ export interface ContentSearchParams {
   until?: number;
   authors?: string[];
   limit?: number;
+  /** Community hex pubkey or npub; appends NIP-50 community:<hex> to the search. */
+  community?: string;
 }
 
 /**
@@ -162,7 +165,10 @@ export function buildContentFilter(params: ContentSearchParams): Filter {
   kinds.push(SNIPPET_KIND);
 
   const filter: Filter = { kinds, limit };
-  if (params.query?.trim()) filter.search = params.query.trim();
+  const searchTerms: string[] = [];
+  if (params.query?.trim()) searchTerms.push(params.query.trim());
+  if (params.community) searchTerms.push(`community:${normalizeCommunityPubkey(params.community)}`);
+  if (searchTerms.length) filter.search = searchTerms.join(' ');
   if (params.since !== undefined) filter.since = params.since;
   if (params.until !== undefined) filter.until = params.until;
   if (params.authors?.length) filter.authors = params.authors;

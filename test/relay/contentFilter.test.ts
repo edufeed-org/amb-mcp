@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { nip19 } from 'nostr-tools';
 import { buildContentFilter } from '../../src/relay/filters.js';
 
 describe('buildContentFilter', () => {
@@ -36,5 +37,29 @@ describe('buildContentFilter', () => {
     const f = buildContentFilter({ types: ['resource'] });
     expect(f.kinds).toContain(21142);
     expect(f.kinds).toContain(30142);
+  });
+});
+
+describe('buildContentFilter community param', () => {
+  const hex = '660d8c78651f70487ec9b8ddc283e29cf2561693dda3ba246d3fd3c08dbb7083';
+
+  it('sets search to community:<hex> when only community is given', () => {
+    const filter = buildContentFilter({ community: hex });
+    expect(filter.search).toBe(`community:${hex}`);
+  });
+
+  it('space-joins free-text query and community', () => {
+    const filter = buildContentFilter({ query: 'mathematik', community: hex });
+    expect(filter.search).toBe(`mathematik community:${hex}`);
+  });
+
+  it('normalizes an npub community to hex', () => {
+    const npub = nip19.npubEncode(hex);
+    const filter = buildContentFilter({ community: npub });
+    expect(filter.search).toBe(`community:${hex}`);
+  });
+
+  it('throws on malformed community', () => {
+    expect(() => buildContentFilter({ community: 'garbage' })).toThrow(/expected/i);
   });
 });

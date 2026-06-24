@@ -66,6 +66,17 @@ export function registerCalendarTools(
           .array(z.string())
           .optional()
           .describe('Filter by author pubkeys (hex format)'),
+        community: z
+          .string()
+          .optional()
+          .describe(
+            'Return calendar events shared into this community (Communikey). Accepts a hex pubkey ' +
+              'or npub; resolve a community name with resolve_author. LIMITATION: this filter is ' +
+              'silently ignored when combined with a time-range or geo query (startAfter/startBefore/' +
+              'endAfter/endBefore/geohash), because those route to the relay time index which ignores ' +
+              'full-text search. For "events shared with X next week", query by community alone, then ' +
+              'filter the returned events by date client-side.',
+          ),
         kinds: z
           .array(z.number())
           .optional()
@@ -99,6 +110,7 @@ export function registerCalendarTools(
         geohash: params.geohash,
         hashtags: params.hashtags,
         authors: params.authors,
+        community: params.community,
         kinds: params.kinds,
         since: params.since,
         until: params.until,

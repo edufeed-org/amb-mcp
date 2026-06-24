@@ -78,6 +78,14 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
           .optional()
           .default(20)
           .describe('Max results (1-250, default 20).'),
+        community: z
+          .string()
+          .optional()
+          .describe(
+            'Return content shared into this community (Communikey). Accepts a hex pubkey or npub. ' +
+              'Resolve a community name to its pubkey with resolve_author. Combine with query to ' +
+              'scope a topic to a community (e.g. "math resources shared with X").',
+          ),
       },
     },
     async (params) => {
@@ -89,6 +97,7 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
         until: params.until,
         authors: params.authors,
         limit: params.limit,
+        community: params.community,
       });
       return { content: [{ type: 'text', text: JSON.stringify(out) }] };
     }

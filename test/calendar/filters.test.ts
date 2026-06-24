@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { nip19 } from 'nostr-tools';
 import { buildCalendarFilter } from '../../src/calendar/filters.js';
 
 describe('buildCalendarFilter', () => {
@@ -101,5 +102,29 @@ describe('buildCalendarFilter', () => {
     const filter = buildCalendarFilter({ query: 'mathe', startAfter: 100 });
     expect(filter.search).toBe('mathe');
     expect((filter as Record<string, unknown>)['#start_after']).toEqual(['100']);
+  });
+});
+
+describe('buildCalendarFilter community param', () => {
+  const hex = '660d8c78651f70487ec9b8ddc283e29cf2561693dda3ba246d3fd3c08dbb7083';
+
+  it('sets search to community:<hex> when only community is given', () => {
+    const filter = buildCalendarFilter({ community: hex });
+    expect(filter.search).toBe(`community:${hex}`);
+  });
+
+  it('space-joins query and community', () => {
+    const filter = buildCalendarFilter({ query: 'mathematik', community: hex });
+    expect(filter.search).toBe(`mathematik community:${hex}`);
+  });
+
+  it('normalizes an npub community to hex', () => {
+    const npub = nip19.npubEncode(hex);
+    const filter = buildCalendarFilter({ community: npub });
+    expect(filter.search).toBe(`community:${hex}`);
+  });
+
+  it('throws on malformed community', () => {
+    expect(() => buildCalendarFilter({ community: 'garbage' })).toThrow(/expected/i);
   });
 });

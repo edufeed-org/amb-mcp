@@ -5,6 +5,10 @@
  * an Express app at `/mcp` (POST/GET/DELETE) plus a `/healthz` endpoint.
  * Uses stateful sessions so server-push notifications (e.g. progress from
  * the LLM-backed extract_metadata tool) reach the client over SSE.
+ *
+ * Authentication: when `opts.auth` is provided, every /mcp request must carry
+ * a valid JWT issued by the configured Keycloak realm. The PRM document is
+ * served unauthenticated at /.well-known/oauth-protected-resource (RFC 9728).
  */
 
 import { randomUUID } from 'node:crypto';
@@ -17,21 +21,36 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
+import type { AuthContext } from './auth.js';
+import { AuthError } from './auth.js';
+import { buildProtectedResourceMetadata } from './prm.js';
+
 export interface HttpServerOptions {
   port: number;
   host: string;
-  /** If set, every /mcp request must carry `Authorization: Bearer <token>`. */
-  bearerToken?: string;
+  /** OAuth resource-server config. When set, every /mcp request needs a valid JWT. */
+  auth?: {
+    verify: (token: string) => Promise<AuthContext>;
+    resourceUrl: string;
+    issuer: string;
+    scopes: string[];
+  };
+  /** Transitional: also accept this static bearer during migration. Remove post-rollout. */
+  legacyBearerToken?: string;
   /** Host header allow-list for DNS-rebinding protection. */
   allowedHosts?: string[];
   /** Origin allow-list for DNS-rebinding protection. */
   allowedOrigins?: string[];
   /**
    * Factory called once per new MCP session to build a fresh server.
+   * Receives the authenticated scopes so the session can be scope-gated.
    * `dispose` (if returned) is invoked when the session closes, so the
    * session's relay connections can be torn down.
    */
-  buildMcpServer: () => { server: McpServer; dispose?: () => void | Promise<void> };
+  buildMcpServer: (ctx: { scopes: string[] }) => {
+    server: McpServer;
+    dispose?: () => void | Promise<void>;
+  };
   /** Used in /healthz response. */
   serverName?: string;
   serverVersion?: string;
@@ -39,19 +58,21 @@ export interface HttpServerOptions {
 
 export interface HttpServerHandle {
   close(): Promise<void>;
+  port: number;
 }
 
 export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServerHandle> {
   const {
     port,
     host,
-    bearerToken,
     allowedHosts,
     allowedOrigins,
     buildMcpServer,
     serverName = 'amb-mcp',
     serverVersion = '0.0.0',
   } = opts;
+
+  const legacyBearerToken = opts.legacyBearerToken;
 
   const app = express();
   app.use(express.json({ limit: '4mb' }));
@@ -74,26 +95,49 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
     });
   });
 
-  // Bearer-token middleware applied only to /mcp.
-  const bearerAuth = (req: Request, res: Response, next: NextFunction) => {
-    if (!bearerToken) return next();
+  // PRM document served unauthenticated (RFC 9728).
+  if (opts.auth) {
+    const prm = buildProtectedResourceMetadata({
+      resource: opts.auth.resourceUrl,
+      issuer: opts.auth.issuer,
+      scopes: opts.auth.scopes,
+    });
+    app.get('/.well-known/oauth-protected-resource', (_req, res) => res.json(prm));
+  }
+
+  // WWW-Authenticate challenge value for 401 responses.
+  const challenge = opts.auth
+    ? `Bearer resource_metadata="${opts.auth.resourceUrl.replace(/\/mcp$/, '')}/.well-known/oauth-protected-resource"`
+    : 'Bearer realm="amb-mcp"';
+
+  // JWT middleware applied to /mcp routes.
+  const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+    if (!opts.auth && !legacyBearerToken) return next();
     const header = req.headers.authorization;
-    const got = typeof header === 'string' ? header.replace(/^Bearer\s+/i, '') : '';
-    if (got !== bearerToken) {
-      res.setHeader('WWW-Authenticate', 'Bearer realm="amb-mcp"');
-      res.status(401).json({
-        jsonrpc: '2.0',
-        error: { code: -32001, message: 'Unauthorized' },
-        id: null,
-      });
-      return;
+    const token = typeof header === 'string' ? header.replace(/^Bearer\s+/i, '') : '';
+
+    if (legacyBearerToken && token === legacyBearerToken) {
+      res.locals.scopes = ['mcp:read', 'mcp:extract'];
+      return next();
     }
-    next();
+    if (!opts.auth) {
+      res.setHeader('WWW-Authenticate', challenge);
+      return res.status(401).json({ jsonrpc: '2.0', error: { code: -32001, message: 'Unauthorized' }, id: null });
+    }
+    try {
+      const ctx = await opts.auth.verify(token);
+      res.locals.scopes = ctx.scopes;
+      next();
+    } catch (err) {
+      const status = err instanceof AuthError ? err.status : 401;
+      res.setHeader('WWW-Authenticate', challenge);
+      res.status(status).json({ jsonrpc: '2.0', error: { code: -32001, message: 'Unauthorized' }, id: null });
+    }
   };
 
   const transports = new Map<string, StreamableHTTPServerTransport>();
 
-  app.post('/mcp', bearerAuth, async (req, res) => {
+  app.post('/mcp', authMiddleware, async (req, res) => {
     const sid = req.headers['mcp-session-id'];
     const sessionId = typeof sid === 'string' ? sid : undefined;
 
@@ -112,7 +156,7 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
         allowedHosts,
         allowedOrigins,
       });
-      const { server: mcp, dispose } = buildMcpServer();
+      const { server: mcp, dispose } = buildMcpServer({ scopes: (res.locals.scopes as string[]) ?? [] });
       transport.onclose = () => {
         if (transport?.sessionId) transports.delete(transport.sessionId);
         void dispose?.();
@@ -147,14 +191,16 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
     await transport.handleRequest(req, res);
   };
 
-  app.get('/mcp', bearerAuth, sessionRequestHandler);
-  app.delete('/mcp', bearerAuth, sessionRequestHandler);
+  app.get('/mcp', authMiddleware, sessionRequestHandler);
+  app.delete('/mcp', authMiddleware, sessionRequestHandler);
 
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(port, host, () => resolve(s));
   });
+  const resolvedPort = (server.address() as import('node:net').AddressInfo).port;
 
   return {
+    port: resolvedPort,
     async close() {
       for (const t of transports.values()) {
         try {

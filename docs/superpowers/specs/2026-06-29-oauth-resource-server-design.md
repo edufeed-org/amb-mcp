@@ -68,14 +68,23 @@ Because amb-mcp itself becomes the resource server, the sigbit proxy is removed 
 
 ## Scope & token model
 
+### HTTP tool exposure (security boundary)
+
+`registerTools` (`src/tools/index.ts:30`) currently registers the full toolset on every transport, including **write/signing tools** — `sign_event`, `publish_event`, `create_and_publish_metadata`, `create_and_publish_resource`, the `signer_*` tools, `add_relay`/`remove_relay`, and the SKOS-builder mutators. These must **not** be reachable by third parties.
+
+**Decision:** the public HTTP endpoint exposes only **read + extract** tools. Write/signing tools remain available on the trusted stdio/ContextVM entry points but are excluded from the HTTP build. This keeps the two-scope model valid and removes the signing tools as an attack surface entirely (defense in depth — they are gone, not merely scope-gated).
+
+HTTP-exposed (read) tools: `search_resources`, `search_content`, `search_calendar_events`, `get_resource`, `resolve_author`, `browse_subjects`, `browse_resource_types`, `browse_educational_levels`, `relay_stats`, `list_relays`, `relay_list_get`, the SKOS read tools (`skos_get_vocabulary`, `skos_get_concept`, `skos_search`), and author-directory tools — plus `extract_metadata` (extract scope).
+Excluded from HTTP: `sign_event`, `publish_event`, `create_and_publish_metadata`, `create_and_publish_resource`, `signer_*`, `add_relay`, `remove_relay`, SKOS-builder mutators.
+
 ### Scopes
 
 | Scope | Tools | Cost |
 |-------|-------|------|
-| `mcp:read` | `search_content`, `search_calendar_events`, `get_resource`, `resolve_author` | cheap (relay / typesense) |
+| `mcp:read` | all HTTP-exposed read tools (search/get/browse/resolve/relay-read/skos-read/author) | cheap (relay / typesense) |
 | `mcp:extract` | `extract_metadata` | spends Anthropic API budget |
 
-`mcp:extract` does **not** imply `mcp:read`; a token carries whichever scopes it was granted. `tools/list` is filtered to the scopes the token holds, so a read-only client never sees `extract_metadata`.
+`mcp:extract` does **not** imply `mcp:read`; a token carries whichever scopes it was granted. Scope mapping: `extract_metadata → mcp:extract`, everything else (all read tools) `→ mcp:read`. Because write/signing tools are excluded from the HTTP build, a default of `mcp:read` for unmapped tools is safe. `tools/list` is filtered to the scopes the token holds, so a read-only client never sees `extract_metadata`.
 
 ### Token (Keycloak-issued JWT)
 
@@ -103,7 +112,9 @@ Because amb-mcp itself becomes the resource server, the sigbit proxy is removed 
 
 ## amb-mcp code changes
 
-Files: `src/transport/http.ts`, `src/http.ts`, new `src/transport/auth.ts`; `package.json` (+`jose`).
+Files: `src/transport/http.ts`, `src/http.ts`, `src/session.ts`, `src/tools/index.ts`, new `src/transport/auth.ts`; `package.json` (+`jose`).
+
+- **Tool-profile split** (`src/tools/index.ts`, `src/session.ts`): split `registerTools` into read tools and write/signing tools; `buildSessionServer` gains an `exposeWriteTools` flag (default `true`). The HTTP entry point (`src/http.ts`) builds sessions with `exposeWriteTools: false`, so the public endpoint never registers signing/publishing tools. stdio/ContextVM paths keep the full set.
 
 - **`src/transport/auth.ts` (new):** `createJwtVerifier({ issuer, audience, jwksUri })` → Express middleware validating the token and attaching `req.auth = { sub, scopes }`. Uses `jose` `createRemoteJWKSet` + `jwtVerify`.
 - **PRM route:** `GET /.well-known/oauth-protected-resource` returns

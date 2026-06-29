@@ -31,6 +31,7 @@
     "applesauce-signers": "^5.1.0",
     "cors": "^2.8.6",
     "express": "^4.22.1",
+    "jose": "^5.9.6",
     "jsonrepair": "^3.14.0",
     "linkedom": "^0.18.12",
     "n3": "^2.0.1",

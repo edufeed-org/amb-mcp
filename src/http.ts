@@ -7,14 +7,27 @@
  * (Claude.ai connectors, MCP Inspector, custom browser apps) can connect.
  */
 
+import { fileURLToPath } from 'node:url';
 import {
   loadAuthorSets,
   setAuthorDirectory,
   setCalendarAuthorDirectory,
 } from './authors.js';
 import { startHttpServer } from './transport/http.js';
+import { createJwtVerifier } from './transport/auth.js';
 import { buildSessionServer } from './session.js';
 import { SERVER_NAME, SERVER_VERSION } from './server-info.js';
+import type { ToolProfile } from './tools/index.js';
+
+// Deliberate deviation: insufficient scope yields a session built WITHOUT those tools
+// (absent from tools/list; a call returns MCP method-not-found) rather than HTTP 403.
+export function scopesToProfile(scopes: string[]): ToolProfile {
+  return {
+    read: scopes.includes('mcp:read'),
+    extract: scopes.includes('mcp:extract'),
+    write: false, // write/signing tools are never exposed over HTTP
+  };
+}
 
 // Configuration from environment
 const AMB_RELAYS = process.env.AMB_RELAYS?.split(',') || ['wss://relay.edufeed.org'];
@@ -26,20 +39,22 @@ const CALENDAR_AUTHOR_SETS =
 
 const HTTP_PORT = Number(process.env.HTTP_PORT ?? 3000);
 const HTTP_HOST = process.env.HTTP_HOST ?? '0.0.0.0';
-const HTTP_BEARER_TOKEN = process.env.HTTP_BEARER_TOKEN || undefined;
-const HTTP_ALLOWED_HOSTS = process.env.HTTP_ALLOWED_HOSTS?.split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
-const HTTP_ALLOWED_ORIGINS = process.env.HTTP_ALLOWED_ORIGINS?.split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
+const OAUTH_ISSUER = process.env.OAUTH_ISSUER || 'https://auth.edufeed.org/realms/edufeed';
+const OAUTH_AUDIENCE = process.env.OAUTH_AUDIENCE || 'amb-mcp';
+const OAUTH_JWKS_URI =
+  process.env.OAUTH_JWKS_URI || `${OAUTH_ISSUER}/protocol/openid-connect/certs`;
+const OAUTH_RESOURCE_URL =
+  process.env.OAUTH_RESOURCE_URL || 'https://mcp.amb.edufeed.org/mcp';
+const LEGACY_BEARER_TOKEN = process.env.LEGACY_BEARER_TOKEN || undefined; // transitional
+const HTTP_ALLOWED_HOSTS = process.env.HTTP_ALLOWED_HOSTS?.split(',').map((s) => s.trim()).filter(Boolean);
+const HTTP_ALLOWED_ORIGINS = process.env.HTTP_ALLOWED_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean);
 
 async function main() {
   console.log('Starting AMB Relay MCP Server (HTTP mode)...');
   console.log(`AMB Relays: ${AMB_RELAYS.join(', ')}`);
   console.log(`Calendar Relays: ${CALENDAR_RELAYS.join(', ')}`);
   console.log(`HTTP bind: ${HTTP_HOST}:${HTTP_PORT}`);
-  console.log(`Auth: ${HTTP_BEARER_TOKEN ? 'bearer token required' : 'open (no auth)'}`);
+  console.log(`Auth: OAuth (issuer ${OAUTH_ISSUER})${LEGACY_BEARER_TOKEN ? ' + legacy bearer' : ''}`);
   if (HTTP_ALLOWED_HOSTS?.length) console.log(`Allowed hosts: ${HTTP_ALLOWED_HOSTS.join(', ')}`);
   if (HTTP_ALLOWED_ORIGINS?.length) console.log(`Allowed origins: ${HTTP_ALLOWED_ORIGINS.join(', ')}`);
 
@@ -71,18 +86,30 @@ async function main() {
     }
   }
 
+  const verify = createJwtVerifier({ issuer: OAUTH_ISSUER, audience: OAUTH_AUDIENCE, jwksUri: OAUTH_JWKS_URI });
+
   const handle = await startHttpServer({
     port: HTTP_PORT,
     host: HTTP_HOST,
-    bearerToken: HTTP_BEARER_TOKEN,
+    auth: {
+      verify,
+      resourceUrl: OAUTH_RESOURCE_URL,
+      issuer: OAUTH_ISSUER,
+      scopes: ['mcp:read', 'mcp:extract'],
+    },
+    legacyBearerToken: LEGACY_BEARER_TOKEN,
     allowedHosts: HTTP_ALLOWED_HOSTS,
     allowedOrigins: HTTP_ALLOWED_ORIGINS,
     serverName: SERVER_NAME,
     serverVersion: SERVER_VERSION,
-    buildMcpServer: () => {
+    buildMcpServer: ({ scopes }) => {
       // Per-session relay clients: each session starts from the configured
       // defaults and can add/remove relays without affecting other sessions.
-      const { server, dispose } = buildSessionServer(AMB_RELAYS, CALENDAR_RELAYS);
+      const { server, dispose } = buildSessionServer(
+        AMB_RELAYS,
+        CALENDAR_RELAYS,
+        scopesToProfile(scopes),
+      );
       return { server, dispose };
     },
   });
@@ -107,7 +134,10 @@ async function main() {
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 }
 
-main().catch((error) => {
-  console.error('Failed to start server:', error);
-  process.exit(1);
-});
+// Only run main() when executed directly (not imported as a module in tests).
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((error) => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  });
+}

@@ -5,6 +5,14 @@ import { buildSessionServer } from '../src/session.js';
 const DEFAULTS = ['wss://relay.edufeed.org'];
 const CAL_DEFAULTS = ['wss://dev.calendar-relay.edufeed.org'];
 
+async function listToolNames(profile?: { read?: boolean; extract?: boolean; write?: boolean }) {
+  const s = buildSessionServer(DEFAULTS, CAL_DEFAULTS, profile);
+  // McpServer exposes registered tools via its internal registry.
+  const names = Object.keys((s.server as unknown as { _registeredTools: Record<string, unknown> })._registeredTools);
+  s.dispose();
+  return names;
+}
+
 describe('buildSessionServer per-session relay isolation', () => {
   it('gives each session independent relay clients', () => {
     const a = buildSessionServer(DEFAULTS, CAL_DEFAULTS);
@@ -51,5 +59,33 @@ describe('buildSessionServer per-session relay isolation', () => {
       a.dispose();
       a.dispose();
     }).not.toThrow();
+  });
+});
+
+describe('buildSessionServer tool profile', () => {
+  it('read-only profile excludes write and extract tools', async () => {
+    const names = await listToolNames({ read: true, extract: false, write: false });
+    expect(names).toContain('search_content');
+    expect(names).toContain('get_resource');
+    expect(names).not.toContain('extract_metadata');
+    expect(names).not.toContain('publish_event');
+    expect(names).not.toContain('sign_event');
+    expect(names).not.toContain('add_relay');
+  });
+
+  it('extract profile adds extract_metadata but still no write tools', async () => {
+    const names = await listToolNames({ read: true, extract: true, write: false });
+    expect(names).toContain('extract_metadata');
+    expect(names).not.toContain('publish_event');
+    expect(names).not.toContain('sign_event');
+    expect(names).not.toContain('add_relay');
+    expect(names).not.toContain('skos_create_vocabulary');
+  });
+
+  it('default profile keeps the full toolset (write tools present)', async () => {
+    const names = await listToolNames();
+    expect(names).toContain('publish_event');
+    expect(names).toContain('sign_event');
+    expect(names).toContain('add_relay');
   });
 });

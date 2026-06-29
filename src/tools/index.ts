@@ -24,46 +24,52 @@ import { registerCalendarTools } from './calendar.js';
 import { registerExtractTool } from './extract.js';
 import { registerSearchContentTool } from './searchContent.js';
 
+export interface ToolProfile {
+  read?: boolean;
+  extract?: boolean;
+  write?: boolean;
+}
+
 /**
- * Register all MCP tools with the server
+ * Register MCP tools with the server, filtered by the given profile.
+ *
+ * Defaults to the full toolset (read + extract + write) to preserve
+ * existing behaviour for stdio callers.
  */
 export function registerTools(
   server: McpServer,
   client: AMBRelayClient,
-  calendarClient?: AMBRelayClient
+  calendarClient?: AMBRelayClient,
+  profile: ToolProfile = { read: true, extract: true, write: true },
 ): void {
-  // Query tools
-  registerSearchTool(server, client);
-  registerSearchContentTool(server, client);
-  registerGetTool(server, client);
-  registerBrowseSubjectsTool(server, client);
-  registerBrowseResourceTypesTool(server, client);
-  registerBrowseEducationalLevelsTool(server, client);
-  registerStatsTool(server, client);
-
-  // Relay management tools
-  registerListRelaysTool(server, client);
-  registerAddRelayTool(server, client);
-  registerRemoveRelayTool(server, client);
-  registerRelayListGetTool(server, client);
-
-  // SKOS tools
-  registerSKOSTools(server);
-  registerSKOSBuilderTools(server);
-
-  // Signer and publishing tools
-  registerSignerTools(server);
-  registerPublishTools(server);
-
-  // Author directory tools
-  registerAuthorTools(server);
-  registerResolveAuthorTool(server, client);
-
-  // Calendar tools
-  if (calendarClient) {
-    registerCalendarTools(server, calendarClient);
+  if (profile.read) {
+    // Query / read tools
+    registerSearchTool(server, client);
+    registerSearchContentTool(server, client);
+    registerGetTool(server, client);
+    registerBrowseSubjectsTool(server, client);
+    registerBrowseResourceTypesTool(server, client);
+    registerBrowseEducationalLevelsTool(server, client);
+    registerStatsTool(server, client);
+    registerListRelaysTool(server, client);
+    registerRelayListGetTool(server, client);
+    registerSKOSTools(server);
+    registerAuthorTools(server);
+    registerResolveAuthorTool(server, client);
+    if (calendarClient) registerCalendarTools(server, calendarClient);
   }
 
-  // URL → form-prefill metadata extraction
-  registerExtractTool(server);
+  if (profile.extract) {
+    // URL → form-prefill metadata extraction
+    registerExtractTool(server);
+  }
+
+  if (profile.write) {
+    // Mutating / signing tools — never exposed on the public HTTP endpoint.
+    registerAddRelayTool(server, client);
+    registerRemoveRelayTool(server, client);
+    registerSKOSBuilderTools(server);
+    registerSignerTools(server);
+    registerPublishTools(server);
+  }
 }

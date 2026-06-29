@@ -156,6 +156,7 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
         allowedHosts,
         allowedOrigins,
       });
+      // Tool profile is fixed at init time from the initializing token's scopes; it is not re-derived per subsequent request on this session.
       const { server: mcp, dispose } = buildMcpServer({ scopes: (res.locals.scopes as string[]) ?? [] });
       transport.onclose = () => {
         if (transport?.sessionId) transports.delete(transport.sessionId);

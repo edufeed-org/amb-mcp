@@ -60,6 +60,30 @@ describe('HTTP transport OAuth', () => {
     expect(res.status).toBe(401);
   });
 
+  it('accepts /mcp with a valid signed token (200, no WWW-Authenticate)', async () => {
+    const token = await sign('mcp:read');
+    const res = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'Mcp-Protocol-Version': '2025-03-26',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'test-client', version: '0' },
+        },
+      }),
+    });
+    expect(res.status).not.toBe(401);
+    expect(res.headers.get('www-authenticate')).toBeNull();
+  });
+
   it('keeps /healthz open', async () => {
     const res = await fetch(`${base}/healthz`);
     expect(res.status).toBe(200);

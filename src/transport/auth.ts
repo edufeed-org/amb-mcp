@@ -29,6 +29,7 @@ export function createJwtVerifier(cfg: AuthConfig): (token: string) => Promise<A
       const { payload } = await jwtVerify(token, getKey, {
         issuer: cfg.issuer,
         audience: cfg.audience,
+        algorithms: ['RS256'],
       });
       const scope = typeof payload.scope === 'string' ? payload.scope : '';
       return {

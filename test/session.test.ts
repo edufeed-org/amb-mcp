@@ -77,6 +77,9 @@ describe('buildSessionServer tool profile', () => {
     const names = await listToolNames({ read: true, extract: true, write: false });
     expect(names).toContain('extract_metadata');
     expect(names).not.toContain('publish_event');
+    expect(names).not.toContain('sign_event');
+    expect(names).not.toContain('add_relay');
+    expect(names).not.toContain('skos_create_vocabulary');
   });
 
   it('default profile keeps the full toolset (write tools present)', async () => {

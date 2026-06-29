@@ -11,7 +11,7 @@
  * served unauthenticated at /.well-known/oauth-protected-resource (RFC 9728).
  */
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Server } from 'node:http';
 
 import express, { type Request, type Response, type NextFunction } from 'express';
@@ -116,9 +116,13 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
     const header = req.headers.authorization;
     const token = typeof header === 'string' ? header.replace(/^Bearer\s+/i, '') : '';
 
-    if (legacyBearerToken && token === legacyBearerToken) {
-      res.locals.scopes = ['mcp:read', 'mcp:extract'];
-      return next();
+    if (legacyBearerToken) {
+      const a = Buffer.from(token);
+      const b = Buffer.from(legacyBearerToken);
+      if (a.length === b.length && timingSafeEqual(a, b)) {
+        res.locals.scopes = ['mcp:read', 'mcp:extract'];
+        return next();
+      }
     }
     if (!opts.auth) {
       res.setHeader('WWW-Authenticate', challenge);

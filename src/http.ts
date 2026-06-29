@@ -19,6 +19,8 @@ import { buildSessionServer } from './session.js';
 import { SERVER_NAME, SERVER_VERSION } from './server-info.js';
 import type { ToolProfile } from './tools/index.js';
 
+// Deliberate deviation: insufficient scope yields a session built WITHOUT those tools
+// (absent from tools/list; a call returns MCP method-not-found) rather than HTTP 403.
 export function scopesToProfile(scopes: string[]): ToolProfile {
   return {
     read: scopes.includes('mcp:read'),

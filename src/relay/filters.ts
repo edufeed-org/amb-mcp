@@ -136,6 +136,9 @@ const CONTENT_TYPE_KINDS: Record<ContentType, number> = {
   resource: 30142,
   article: 30023,
   wiki: 30818,
+  project: 30143,
+  measure: 30144,
+  publication: 30145,
 };
 
 export interface ContentSearchParams {
@@ -160,7 +163,7 @@ export function buildContentFilter(params: ContentSearchParams): Filter {
   const limit = Math.min(Math.max(params.limit ?? 20, 1), 250);
   const types: ContentType[] = params.types?.length
     ? params.types
-    : (['resource', 'article', 'wiki'] as ContentType[]);
+    : (['resource', 'article', 'wiki', 'project', 'measure', 'publication'] as ContentType[]);
   const kinds = types.map((t) => CONTENT_TYPE_KINDS[t]);
   kinds.push(SNIPPET_KIND);
 

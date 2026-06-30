@@ -44,11 +44,12 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
   server.registerTool(
     'search_content',
     {
-      title: 'Search Educational Content (resources, articles, wikis)',
+      title: 'Search Educational Content (resources, articles, wikis, transferkiosk)',
       description:
         'Topic search across ALL content types on the relay in one ranked call: ' +
-        'educational resources (kind 30142), long-form articles/blogs (30023), and ' +
-        'wikis (30818). Results are interleaved and ranked by semantic passage match, ' +
+        'educational resources (kind 30142), long-form articles/blogs (30023), ' +
+        'wikis (30818), and transferkiosk projects/measures/publications ' +
+        '(30143/30144/30145). Results are interleaved and ranked by semantic passage match, ' +
         'and each carries the matched passage ("snippet") when available — use it to ' +
         'answer the user, not just list links. This is the default tool for ' +
         'natural-language questions like "what can I do about inattentive students?". ' +
@@ -64,9 +65,11 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
           .optional()
           .describe('Free-text topic (e.g., "Unaufmerksamkeit im Seminar").'),
         types: z
-          .array(z.enum(['resource', 'article', 'wiki']))
+          .array(
+            z.enum(['resource', 'article', 'wiki', 'project', 'measure', 'publication'])
+          )
           .optional()
-          .describe('Restrict to a subset of content types. Default: all three.'),
+          .describe('Restrict to a subset of content types. Default: all of them.'),
         language: z.string().optional().default('de').describe('Label language (default "de").'),
         since: z.number().optional().describe('Created at or after this Unix timestamp.'),
         until: z.number().optional().describe('Created at or before this Unix timestamp.'),

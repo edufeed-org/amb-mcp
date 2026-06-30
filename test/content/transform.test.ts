@@ -143,6 +143,96 @@ describe('transformContentEvent — resource (30142)', () => {
   });
 });
 
+describe('transformContentEvent — transferkiosk (30143/30144/30145)', () => {
+  it('projects a Projekt (30143): title from name, description, excerpt', () => {
+    const e = evt(
+      30143,
+      [
+        ['d', 'https://transferkiosk.net/p/101323'],
+        ['type', 'ResearchProject'],
+        ['name', 'Studentische Partizipation an der Hochschule'],
+        ['description', 'Ein Projekt zur Förderung studentischer Beteiligung'],
+      ],
+      'Im Projektzeitraum wurden verschiedene Beteiligungsformate entwickelt.'
+    );
+    const r = transformContentEvent(e, 'de');
+    expect(r).not.toBeNull();
+    expect(r!.type).toBe('project');
+    expect(r!.kind).toBe(30143);
+    expect(r!.title).toBe('Studentische Partizipation an der Hochschule');
+    expect((r as any).description).toBe('Ein Projekt zur Förderung studentischer Beteiligung');
+    expect((r as any).excerpt).toContain('Beteiligungsformate');
+    // A root project carries no partOf link.
+    expect((r as any).partOf).toBeUndefined();
+    expect(r!.eventAuthor.npub).toMatch(/^npub1/);
+  });
+
+  it('projects a Maßnahme (30144) with its parent project coord in partOf', () => {
+    const e = evt(
+      30144,
+      [
+        ['d', 'https://transferkiosk.net/p/101323/act/100262'],
+        ['type', 'TeachingMeasure'],
+        ['name', 'Beteiligungsformate für studentische Partizipation'],
+        ['description', 'Verschiedene Beteiligungsformate wurden erprobt.'],
+        ['summary', 'Formate zur studentischen Beteiligung'],
+        [
+          'a',
+          '30143:d2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612:https://transferkiosk.net/p/101323',
+          'wss://relay.edufeed.org',
+          'isPartOf',
+        ],
+      ],
+      'Die Formate reichten von niedrigschwelligen Möglichkeiten bis zu Veranstaltungen.'
+    );
+    const r = transformContentEvent(e, 'de');
+    expect(r!.type).toBe('measure');
+    expect(r!.kind).toBe(30144);
+    expect(r!.title).toBe('Beteiligungsformate für studentische Partizipation');
+    expect((r as any).summary).toBe('Formate zur studentischen Beteiligung');
+    expect((r as any).partOf).toBe(
+      '30143:d2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612:https://transferkiosk.net/p/101323'
+    );
+  });
+
+  it('projects a Publikation (30145) and reads partOf from an isOutputOf marker', () => {
+    const e = evt(
+      30145,
+      [
+        ['d', 'https://doi.org/10.25673/103431'],
+        ['type', 'ScholarlyArticle'],
+        ['name', 'Ergebnisse der studentischen Partizipation'],
+        [
+          'a',
+          '30143:d2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612:https://transferkiosk.net/p/101323',
+          'wss://relay.edufeed.org',
+          'isOutputOf',
+        ],
+      ],
+      'Dieser Beitrag dokumentiert die Ergebnisse.'
+    );
+    const r = transformContentEvent(e, 'de');
+    expect(r!.type).toBe('publication');
+    expect(r!.kind).toBe(30145);
+    expect(r!.title).toBe('Ergebnisse der studentischen Partizipation');
+    expect((r as any).partOf).toBe(
+      '30143:d2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612:https://transferkiosk.net/p/101323'
+    );
+  });
+
+  it('returns null when the name tag is missing (relay requires d + name)', () => {
+    expect(
+      transformContentEvent(evt(30144, [['d', 'no-name']]), 'de')
+    ).toBeNull();
+  });
+
+  it('returns null when the d tag is missing', () => {
+    expect(
+      transformContentEvent(evt(30143, [['name', 'No d tag']]), 'de')
+    ).toBeNull();
+  });
+});
+
 describe('transformContentEvent — unknown kind', () => {
   it('returns null for an unregistered kind', () => {
     expect(transformContentEvent(evt(1, [['d', 'x']]), 'de')).toBeNull();

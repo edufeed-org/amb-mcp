@@ -5,7 +5,9 @@ import { buildContentFilter } from '../../src/relay/filters.js';
 describe('buildContentFilter', () => {
   it('defaults to all content kinds plus the 21142 snippet kind', () => {
     const f = buildContentFilter({});
-    expect(new Set(f.kinds)).toEqual(new Set([30142, 30023, 30818, 21142]));
+    expect(new Set(f.kinds)).toEqual(
+      new Set([30142, 30023, 30818, 30143, 30144, 30145, 21142])
+    );
     expect(f.limit).toBe(20);
     expect(f.search).toBeUndefined();
   });
@@ -13,6 +15,11 @@ describe('buildContentFilter', () => {
   it('maps a types subset to the right kinds (plus 21142)', () => {
     const f = buildContentFilter({ types: ['article', 'wiki'] });
     expect(new Set(f.kinds)).toEqual(new Set([30023, 30818, 21142]));
+  });
+
+  it('maps the transferkiosk types to their kinds (plus 21142)', () => {
+    const f = buildContentFilter({ types: ['project', 'measure', 'publication'] });
+    expect(new Set(f.kinds)).toEqual(new Set([30143, 30144, 30145, 21142]));
   });
 
   it('sets the NIP-50 search string from query', () => {

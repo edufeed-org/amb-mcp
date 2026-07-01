@@ -9,6 +9,9 @@ import type {
   ResourceResult,
   ArticleResult,
   WikiResult,
+  ProjectResult,
+  MeasureResult,
+  PublicationResult,
 } from './types.js';
 
 const EXCERPT_MAX = 300;
@@ -112,6 +115,43 @@ function wikiToContentResult(event: NostrEvent): WikiResult | null {
 }
 
 /**
+ * Project the three NIP-DIDACTIC transferkiosk kinds (30143/30144/30145).
+ * The relay requires both `d` and `name`, so a missing either drops the
+ * event. `partOf` carries the parent project coord from an `a` tag marked
+ * `isPartOf` (measures) or `isOutputOf` (publications).
+ */
+function transferkioskToContentResult(
+  event: NostrEvent,
+  type: 'project' | 'measure' | 'publication',
+  kind: 30143 | 30144 | 30145
+): ProjectResult | MeasureResult | PublicationResult | null {
+  const d = tag(event, 'd');
+  const name = tag(event, 'name');
+  if (!d || !name) return null;
+  const { naddr, url } = encodeNaddrAndUrl(event.kind, event.pubkey, d);
+  const result = {
+    type,
+    kind,
+    title: name,
+    naddr,
+    url,
+    eventAuthor: eventAuthor(event.pubkey),
+    createdAt: event.created_at,
+  } as ProjectResult | MeasureResult | PublicationResult;
+  const description = tag(event, 'description');
+  if (description) result.description = description;
+  const summary = tag(event, 'summary');
+  if (summary) result.summary = summary;
+  const partOf = event.tags.find(
+    (t) => t[0] === 'a' && (t[3] === 'isPartOf' || t[3] === 'isOutputOf')
+  )?.[1];
+  if (partOf) result.partOf = partOf;
+  const ex = excerpt(event.content);
+  if (ex) result.excerpt = ex;
+  return result;
+}
+
+/**
  * Kind → transform registry. Adding a future content type (e.g. a forum
  * kind) is a one-line addition here plus its transform function.
  */
@@ -122,6 +162,9 @@ const CONTENT_TRANSFORMS: Record<
   30142: (event, language) => resourceToContentResult(event, language),
   30023: (event) => articleToContentResult(event),
   30818: (event) => wikiToContentResult(event),
+  30143: (event) => transferkioskToContentResult(event, 'project', 30143),
+  30144: (event) => transferkioskToContentResult(event, 'measure', 30144),
+  30145: (event) => transferkioskToContentResult(event, 'publication', 30145),
 };
 
 export function transformContentEvent(

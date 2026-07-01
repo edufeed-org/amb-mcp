@@ -1,5 +1,11 @@
 /** Discriminant for the unified content result. */
-export type ContentType = 'resource' | 'article' | 'wiki';
+export type ContentType =
+  | 'resource'
+  | 'article'
+  | 'wiki'
+  | 'project'
+  | 'measure'
+  | 'publication';
 
 interface ContentResultBase {
   type: ContentType;
@@ -53,4 +59,39 @@ export interface WikiResult extends ContentResultBase {
   topics?: string[];
 }
 
-export type SimplifiedContentResult = ResourceResult | ArticleResult | WikiResult;
+/**
+ * NIP-DIDACTIC transferkiosk content (kinds 30143 Projekt / 30144 Maßnahme /
+ * 30145 Publikation). All three share the same projected shape; `partOf`
+ * carries the parent project coord (`30143:<pub>:<d>`) for measures and
+ * publications, and is absent on root projects.
+ */
+interface TransferkioskResultBase extends ContentResultBase {
+  description?: string;
+  summary?: string;
+  excerpt?: string;
+  /** Parent project coord `30143:<pub>:<d>` (measures/publications only). */
+  partOf?: string;
+}
+
+export interface ProjectResult extends TransferkioskResultBase {
+  type: 'project';
+  kind: 30143;
+}
+
+export interface MeasureResult extends TransferkioskResultBase {
+  type: 'measure';
+  kind: 30144;
+}
+
+export interface PublicationResult extends TransferkioskResultBase {
+  type: 'publication';
+  kind: 30145;
+}
+
+export type SimplifiedContentResult =
+  | ResourceResult
+  | ArticleResult
+  | WikiResult
+  | ProjectResult
+  | MeasureResult
+  | PublicationResult;

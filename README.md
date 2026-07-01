@@ -137,7 +137,7 @@ A managed instance is hosted at:
 https://mcp.amb.edufeed.org/mcp
 ```
 
-It speaks the same streamable-HTTP protocol as the local server, requires `Authorization: Bearer <token>` on every `/mcp` request, and exposes the full tool surface (including `extract_metadata`). Tokens are issued out-of-band — ask the operator. The handshake is identical to the curl example above; just substitute the URL.
+It speaks the same streamable-HTTP protocol as the local server. **Read tools are public** — a request with no `Authorization` header gets a read-only session (search/get/browse/resolve). The budget-spending `extract_metadata` tool requires a valid OAuth token carrying the `mcp:extract` scope; tokens are issued by the Keycloak realm out-of-band — ask the operator. The handshake is otherwise identical to the curl example above; just substitute the URL and drop the `Authorization` header for read-only use.
 
 ## Available Tools
 

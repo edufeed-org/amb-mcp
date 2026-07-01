@@ -11,6 +11,19 @@ const RESOURCE = 'https://mcp.amb.edufeed.org/mcp';
 let handle: HttpServerHandle;
 let base: string;
 let sign: (scope: string) => Promise<string>;
+let lastScopes: string[] | undefined;
+
+// Minimal MCP initialize request body (a session is only built for initialize).
+const initBody = JSON.stringify({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'initialize',
+  params: {
+    protocolVersion: '2025-03-26',
+    capabilities: {},
+    clientInfo: { name: 'test-client', version: '0' },
+  },
+});
 
 beforeAll(async () => {
   const { publicKey, privateKey } = await generateKeyPair('RS256');
@@ -29,7 +42,10 @@ beforeAll(async () => {
     port: 0,
     host: '127.0.0.1',
     auth: { verify, resourceUrl: RESOURCE, issuer: ISSUER, scopes: ['mcp:read', 'mcp:extract'] },
-    buildMcpServer: () => ({ server: new McpServer({ name: 'test', version: '0' }) }),
+    buildMcpServer: ({ scopes }) => {
+      lastScopes = scopes;
+      return { server: new McpServer({ name: 'test', version: '0' }) };
+    },
   });
   base = `http://127.0.0.1:${handle.port}`;
 });
@@ -45,10 +61,16 @@ describe('HTTP transport OAuth', () => {
     expect(doc.authorization_servers).toEqual([ISSUER]);
   });
 
-  it('rejects /mcp without a token (401 + WWW-Authenticate pointing at PRM)', async () => {
-    const res = await fetch(`${base}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    expect(res.status).toBe(401);
-    expect(res.headers.get('www-authenticate')).toContain('oauth-protected-resource');
+  it('serves an anonymous read session (no token) with scopes [mcp:read]', async () => {
+    lastScopes = undefined;
+    const res = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Mcp-Protocol-Version': '2025-03-26' },
+      body: initBody,
+    });
+    expect(res.status).not.toBe(401);
+    expect(res.headers.get('www-authenticate')).toBeNull();
+    expect(lastScopes).toEqual(['mcp:read']);
   });
 
   it('rejects /mcp with a garbage token (401)', async () => {
@@ -88,6 +110,22 @@ describe('HTTP transport OAuth', () => {
     const res = await fetch(`${base}/healthz`);
     expect(res.status).toBe(200);
   });
+
+  it('grants mcp:extract to a session initialized with an extract-scoped token', async () => {
+    lastScopes = undefined;
+    const token = await sign('mcp:read mcp:extract');
+    const res = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'Mcp-Protocol-Version': '2025-03-26',
+      },
+      body: initBody,
+    });
+    expect(res.status).not.toBe(401);
+    expect(lastScopes).toEqual(['mcp:read', 'mcp:extract']);
+  });
 });
 
 import { scopesToProfile } from '../../src/http.js';
@@ -101,5 +139,58 @@ describe('scopesToProfile', () => {
   });
   it('never enables write tools', () => {
     expect(scopesToProfile(['mcp:read', 'mcp:extract', 'mcp:write']).write).toBe(false);
+  });
+});
+
+describe('HTTP transport legacy bearer', () => {
+  let legacyHandle: HttpServerHandle;
+  let legacyBase: string;
+  let capturedScopes: string[] | undefined;
+
+  beforeAll(async () => {
+    legacyHandle = await startHttpServer({
+      port: 0,
+      host: '127.0.0.1',
+      legacyBearerToken: 'legacy-secret',
+      buildMcpServer: ({ scopes }) => {
+        capturedScopes = scopes;
+        return { server: new McpServer({ name: 'test', version: '0' }) };
+      },
+    });
+    legacyBase = `http://127.0.0.1:${legacyHandle.port}`;
+  });
+
+  afterAll(async () => { await legacyHandle.close(); });
+
+  it('legacy bearer grants read+extract', async () => {
+    capturedScopes = undefined;
+    const res = await fetch(`${legacyBase}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer legacy-secret',
+        'Mcp-Protocol-Version': '2025-03-26',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1, method: 'initialize',
+        params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '0' } },
+      }),
+    });
+    expect(res.status).not.toBe(401);
+    expect(capturedScopes).toEqual(['mcp:read', 'mcp:extract']);
+  });
+
+  it('anonymous request on a legacy-only server still gets a read session', async () => {
+    capturedScopes = undefined;
+    const res = await fetch(`${legacyBase}/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Mcp-Protocol-Version': '2025-03-26' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1, method: 'initialize',
+        params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '0' } },
+      }),
+    });
+    expect(res.status).not.toBe(401);
+    expect(capturedScopes).toEqual(['mcp:read']);
   });
 });

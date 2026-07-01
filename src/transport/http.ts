@@ -6,9 +6,11 @@
  * Uses stateful sessions so server-push notifications (e.g. progress from
  * the LLM-backed extract_metadata tool) reach the client over SSE.
  *
- * Authentication: when `opts.auth` is provided, every /mcp request must carry
- * a valid JWT issued by the configured Keycloak realm. The PRM document is
- * served unauthenticated at /.well-known/oauth-protected-resource (RFC 9728).
+ * Authentication: read tools are served anonymously (a tokenless /mcp request
+ * gets an mcp:read session). A supplied token is fully validated (bad token →
+ * 401); a valid token additionally grants its scopes (e.g. mcp:extract). The
+ * PRM document is served unauthenticated at
+ * /.well-known/oauth-protected-resource (RFC 9728).
  */
 
 import { randomUUID, timingSafeEqual } from 'node:crypto';
@@ -112,10 +114,16 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
 
   // JWT middleware applied to /mcp routes.
   const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
-    if (!opts.auth && !legacyBearerToken) return next();
     const header = req.headers.authorization;
-    const token = typeof header === 'string' ? header.replace(/^Bearer\s+/i, '') : '';
+    const token = typeof header === 'string' ? header.replace(/^Bearer\s+/i, '').trim() : '';
 
+    // No credential supplied → anonymous public read.
+    if (!token) {
+      res.locals.scopes = ['mcp:read'];
+      return next();
+    }
+
+    // Transitional static bearer → full read+extract.
     if (legacyBearerToken) {
       const a = Buffer.from(token);
       const b = Buffer.from(legacyBearerToken);
@@ -124,6 +132,8 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
         return next();
       }
     }
+
+    // A token was supplied but is not the legacy one → it must be a valid JWT.
     if (!opts.auth) {
       res.setHeader('WWW-Authenticate', challenge);
       return res.status(401).json({ jsonrpc: '2.0', error: { code: -32001, message: 'Unauthorized' }, id: null });

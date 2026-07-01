@@ -18,6 +18,8 @@ interface ContentResultBase {
   /** The Nostr event signer (uploader/aggregator) — NOT necessarily the resource's creator/publisher. */
   eventAuthor: { pubkey: string; npub?: string };
   createdAt: number;
+  /** Canonical external source page (the resource's own URL, transferkiosk.net, etc.) — a direct link to the material, distinct from the edufeed viewer `url`. */
+  sourcePage?: string;
   /** Best matching passage from a kind-21142 snippet, when available. */
   snippet?: string;
   /** Chunk score from the snippet, when available. */
@@ -71,8 +73,6 @@ interface TransferkioskResultBase extends ContentResultBase {
   excerpt?: string;
   /** Parent project coord `30143:<pub>:<d>` (measures/publications only). */
   partOf?: string;
-  /** Canonical external source page (transferkiosk.net etc.), from the `r` tag. */
-  sourcePage?: string;
 }
 
 export interface ProjectResult extends TransferkioskResultBase {

@@ -126,6 +126,24 @@ describe('transformContentEvent — resource (30142)', () => {
     expect((r as any).description).toBe('Ein Video');
   });
 
+  it('surfaces the http d-tag id as sourcePage (direct source link)', () => {
+    const e = evt(30142, [
+      ['d', 'https://www.e-teaching.org/praxis/foo'],
+      ['name', 'Ein Erfahrungsbericht'],
+    ]);
+    expect((transformContentEvent(e, 'de') as any).sourcePage).toBe(
+      'https://www.e-teaching.org/praxis/foo'
+    );
+  });
+
+  it('leaves sourcePage undefined when the resource id is not a URL', () => {
+    const e = evt(30142, [
+      ['d', '46d54fe5-21b2-41d3-8253-f8824f025864'],
+      ['name', 'UUID-identified resource'],
+    ]);
+    expect((transformContentEvent(e, 'de') as any).sourcePage).toBeUndefined();
+  });
+
   it('surfaces resource publisher/creator distinct from the event signer', () => {
     const e = evt(30142, [
       ['d', 'res-2'],

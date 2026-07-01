@@ -59,8 +59,9 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
         'do not treat eventAuthor as the publisher. For full metadata (license, ' +
         'dates, complete entity lists) pass a result\'s naddr to get_resource. ' +
         'When presenting results to the user, render each as a markdown link so ' +
-        'they can open it directly — prefer sourcePage (the original source page, ' +
-        'on projects/measures/publications), then url, then naddr. ' +
+        'they can open it directly — prefer sourcePage (the original external ' +
+        'source page, present on most resources and on projects/measures/' +
+        'publications), then url, then naddr. ' +
         'For upcoming events on the same topic, follow up with search_calendar_events.',
       inputSchema: {
         query: z

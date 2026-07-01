@@ -44,7 +44,7 @@ function resourceToContentResult(event: NostrEvent, language: string): ResourceR
   const amb = eventToAMBResource(event);
   if (!amb) return null;
   const s = toSimplifiedResource(amb, language);
-  return {
+  const result: ResourceResult = {
     type: 'resource',
     kind: 30142,
     title: s.name,
@@ -59,6 +59,10 @@ function resourceToContentResult(event: NostrEvent, language: string): ResourceR
     eventAuthor: eventAuthor(event.pubkey),
     createdAt: event.created_at,
   };
+  // The AMB `id` is often the resource's own external page — a direct source
+  // link — but can be a bare UUID/hash, so only surface http(s) values.
+  if (s.id && /^https?:\/\//.test(s.id)) result.sourcePage = s.id;
+  return result;
 }
 
 function articleToContentResult(event: NostrEvent): ArticleResult | null {

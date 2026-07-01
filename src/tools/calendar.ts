@@ -19,7 +19,9 @@ export function registerCalendarTools(
       description:
         'Search for NIP-52 calendar events (date-based and time-based). ' +
         'Supports temporal filters (start/end time ranges), geohash location filtering, and hashtag filtering. ' +
-        'Returns events from the configured calendar relay.',
+        'Returns events from the configured calendar relay. ' +
+        'When presenting an event to the user, render it as a markdown link when it ' +
+        'carries a sourcePage (the original event page) so they can open it directly.',
       inputSchema: {
         query: z
           .string()

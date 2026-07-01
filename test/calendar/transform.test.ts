@@ -84,6 +84,7 @@ describe('eventToCalendarEvent', () => {
     expect(result!.geohash).toBe('u33dc');
     expect(result!.hashtags).toEqual(['nostr', 'meetup']);
     expect(result!.references).toEqual(['https://meetup.example.com/nostr-berlin']);
+    expect(result!.sourcePage).toBe('https://meetup.example.com/nostr-berlin');
     expect(result!.description).toBe('Join us for the monthly Nostr meetup!');
   });
 
@@ -189,6 +190,7 @@ describe('eventToCalendarEvent', () => {
     expect(result!.geohash).toBeUndefined();
     expect(result!.hashtags).toBeUndefined();
     expect(result!.references).toBeUndefined();
+    expect(result!.sourcePage).toBeUndefined();
     expect(result!.participants).toBeUndefined();
   });
 });

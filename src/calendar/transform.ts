@@ -21,6 +21,8 @@ export interface CalendarEvent {
   geohash?: string;
   hashtags?: string[];
   references?: string[];
+  /** Canonical external source page (e-teaching.org etc.), from the `r` tag. */
+  sourcePage?: string;
   participants?: CalendarEventParticipant[];
   nostr: {
     eventId: string;
@@ -106,6 +108,8 @@ export function eventToCalendarEvent(event: NostrEvent): CalendarEvent | null {
 
   if (hashtags.length > 0) result.hashtags = hashtags;
   if (references.length > 0) result.references = references;
+  const sourcePage = references.find((r) => /^https?:\/\//.test(r));
+  if (sourcePage) result.sourcePage = sourcePage;
   if (participants.length > 0) result.participants = participants;
 
   return result;

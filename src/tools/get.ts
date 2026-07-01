@@ -26,7 +26,9 @@ export function registerGetTool(server: McpServer, client: AMBRelayClient): void
       description:
         'Retrieve a single educational resource by naddr (preferred — pass a ' +
         'search_content result\'s naddr), d-tag identifier, or event ID. Returns ' +
-        'the full resource metadata including creator/publisher and educational properties.',
+        'the full resource metadata including creator/publisher and educational properties. ' +
+        'When presenting the resource, render its url (or naddr) as a markdown link ' +
+        'so the user can open it directly.',
       inputSchema: {
         identifier: z
           .string()

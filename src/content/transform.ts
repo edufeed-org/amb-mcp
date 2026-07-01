@@ -146,6 +146,14 @@ function transferkioskToContentResult(
     (t) => t[0] === 'a' && (t[3] === 'isPartOf' || t[3] === 'isOutputOf')
   )?.[1];
   if (partOf) result.partOf = partOf;
+  const sourcePage =
+    tagValues(event, 'r').find((r) => /^https?:\/\//.test(r)) ??
+    (/^https?:\/\//.test(d) ? d : undefined);
+  if (sourcePage) result.sourcePage = sourcePage;
+  if (type === 'publication') {
+    const identifier = tag(event, 'i');
+    if (identifier) (result as PublicationResult).identifier = identifier;
+  }
   const ex = excerpt(event.content);
   if (ex) result.excerpt = ex;
   return result;

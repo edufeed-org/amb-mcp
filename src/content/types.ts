@@ -71,6 +71,8 @@ interface TransferkioskResultBase extends ContentResultBase {
   excerpt?: string;
   /** Parent project coord `30143:<pub>:<d>` (measures/publications only). */
   partOf?: string;
+  /** Canonical external source page (transferkiosk.net etc.), from the `r` tag. */
+  sourcePage?: string;
 }
 
 export interface ProjectResult extends TransferkioskResultBase {
@@ -86,6 +88,8 @@ export interface MeasureResult extends TransferkioskResultBase {
 export interface PublicationResult extends TransferkioskResultBase {
   type: 'publication';
   kind: 30145;
+  /** Canonical identifier (DOI or ISBN), from the `i` tag, when present. */
+  identifier?: string;
 }
 
 export type SimplifiedContentResult =

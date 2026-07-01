@@ -220,6 +220,49 @@ describe('transformContentEvent — transferkiosk (30143/30144/30145)', () => {
     );
   });
 
+  it('exposes sourcePage from the r tag', () => {
+    const e = evt(30143, [
+      ['d', 'https://transferkiosk.net/p/101472'],
+      ['name', 'VISITKO'],
+      ['r', 'https://transferkiosk.net/p/101472'],
+    ]);
+    expect((transformContentEvent(e, 'de') as any).sourcePage).toBe(
+      'https://transferkiosk.net/p/101472'
+    );
+  });
+
+  it('falls back to an http-shaped d tag for sourcePage when r is absent', () => {
+    const e = evt(30144, [
+      ['d', 'https://transferkiosk.net/p/101816/act/100028'],
+      ['name', 'Selbstlerntool R'],
+    ]);
+    expect((transformContentEvent(e, 'de') as any).sourcePage).toBe(
+      'https://transferkiosk.net/p/101816/act/100028'
+    );
+  });
+
+  it('leaves sourcePage undefined when there is no r tag and d is not a URL', () => {
+    const e = evt(30143, [
+      ['d', 'local-project-42'],
+      ['name', 'Non-URL identifier'],
+    ]);
+    expect((transformContentEvent(e, 'de') as any).sourcePage).toBeUndefined();
+  });
+
+  it('exposes a publication identifier from the i tag', () => {
+    const e = evt(30145, [
+      ['d', 'https://transferkiosk.net/p/101697/pub/100541'],
+      ['name', 'Ein Aufsatz'],
+      ['r', 'https://transferkiosk.net/p/101697/pub/100541'],
+      ['i', 'https://doi.org/10.11576/hlz-7233'],
+    ]);
+    const r = transformContentEvent(e, 'de');
+    expect((r as any).identifier).toBe('https://doi.org/10.11576/hlz-7233');
+    expect((r as any).sourcePage).toBe(
+      'https://transferkiosk.net/p/101697/pub/100541'
+    );
+  });
+
   it('returns null when the name tag is missing (relay requires d + name)', () => {
     expect(
       transformContentEvent(evt(30144, [['d', 'no-name']]), 'de')

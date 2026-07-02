@@ -1,4 +1,5 @@
 import type { NostrEvent } from 'nostr-tools';
+import { encodeNaddrAndUrl } from '../utils/transform.js';
 
 export interface CalendarEventParticipant {
   pubkey: string;
@@ -24,6 +25,10 @@ export interface CalendarEvent {
   /** Canonical external source page (e-teaching.org etc.), from the `r` tag. */
   sourcePage?: string;
   participants?: CalendarEventParticipant[];
+  /** NIP-19 naddr for this addressable event; omitted on encoding failure. */
+  naddr?: string;
+  /** edufeed-app viewer URL (`<base>/<naddr>`); present only when EDUFEED_APP_BASE_URL is set. */
+  url?: string;
   nostr: {
     eventId: string;
     pubkey: string;
@@ -82,6 +87,10 @@ export function eventToCalendarEvent(event: NostrEvent): CalendarEvent | null {
       createdAt: event.created_at,
     },
   };
+
+  const { naddr, url } = encodeNaddrAndUrl(event.kind, event.pubkey, identifier);
+  if (naddr) result.naddr = naddr;
+  if (url) result.url = url;
 
   // Optional fields — only include if present
   const summary = getTagValue(event, 'summary');

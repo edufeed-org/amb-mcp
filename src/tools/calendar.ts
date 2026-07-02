@@ -20,8 +20,10 @@ export function registerCalendarTools(
         'Search for NIP-52 calendar events (date-based and time-based). ' +
         'Supports temporal filters (start/end time ranges), geohash location filtering, and hashtag filtering. ' +
         'Returns events from the configured calendar relay. ' +
-        'When presenting an event to the user, render it as a markdown link when it ' +
-        'carries a sourcePage (the original event page) so they can open it directly.',
+        'When presenting an event to the user, render it as a markdown link: prefer the ' +
+        'event `url` (the edufeed-app viewer at <base>/<naddr>, which shows fuller details) ' +
+        'over `sourcePage` (the original external event page). Never construct an naddr or ' +
+        'viewer URL yourself — use the `naddr`/`url` fields as returned.',
       inputSchema: {
         query: z
           .string()

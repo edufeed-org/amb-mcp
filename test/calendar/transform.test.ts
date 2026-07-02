@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { eventToCalendarEvent, eventsToCalendarEvents } from '../../src/calendar/transform.js';
-import type { NostrEvent } from 'nostr-tools';
+import { nip19, type NostrEvent } from 'nostr-tools';
+
+// Valid 32-byte hex pubkey so naddr encoding succeeds.
+const HEX_PUBKEY = 'a'.repeat(64);
 
 function createDateEvent(tags: string[][], content = ''): NostrEvent {
   return {
     id: 'event-date-1',
-    pubkey: 'pubkey123',
+    pubkey: HEX_PUBKEY,
     created_at: 1700000000,
     kind: 31922,
     tags,
@@ -17,7 +20,7 @@ function createDateEvent(tags: string[][], content = ''): NostrEvent {
 function createTimeEvent(tags: string[][], content = ''): NostrEvent {
   return {
     id: 'event-time-1',
-    pubkey: 'pubkey456',
+    pubkey: HEX_PUBKEY,
     created_at: 1700000000,
     kind: 31923,
     tags,
@@ -47,7 +50,7 @@ describe('eventToCalendarEvent', () => {
     expect(result!.description).toBe('A relaxing summer holiday');
     expect(result!.locations).toEqual(['Beach Resort']);
     expect(result!.nostr.eventId).toBe('event-date-1');
-    expect(result!.nostr.pubkey).toBe('pubkey123');
+    expect(result!.nostr.pubkey).toBe(HEX_PUBKEY);
     expect(result!.nostr.createdAt).toBe(1700000000);
   });
 
@@ -140,6 +143,42 @@ describe('eventToCalendarEvent', () => {
 
     const result = eventToCalendarEvent(event);
     expect(result!.title).toBe('Legacy Event Title');
+  });
+
+  it('encodes an naddr from the event kind, pubkey and identifier', () => {
+    const event = createDateEvent([
+      ['d', 'holiday-2024'],
+      ['title', 'Summer Holiday'],
+      ['start', '2024-07-01'],
+    ]);
+
+    const result = eventToCalendarEvent(event);
+
+    expect(result!.naddr).toBeDefined();
+    expect(result!.naddr).toMatch(/^naddr1/);
+    const decoded = nip19.decode(result!.naddr!);
+    expect(decoded.type).toBe('naddr');
+    expect(decoded.data).toMatchObject({
+      kind: 31922,
+      pubkey: HEX_PUBKEY,
+      identifier: 'holiday-2024',
+    });
+  });
+
+  it('omits url when EDUFEED_APP_BASE_URL is unset', () => {
+    // The transform module reads the env var at import time and vitest runs
+    // without it, so this asserts the default unset behavior: naddr is still
+    // emitted, but the viewer url is not.
+    const event = createDateEvent([
+      ['d', 'holiday-2024'],
+      ['title', 'Summer Holiday'],
+      ['start', '2024-07-01'],
+    ]);
+
+    const result = eventToCalendarEvent(event);
+
+    expect(result!.url).toBeUndefined();
+    expect(result!.naddr).toBeDefined();
   });
 
   it('returns null when d tag is missing', () => {

@@ -230,6 +230,10 @@ Parameters:
 | `since` / `until` | number | Unix timestamp bounds on event creation time |
 | `limit` | number | Max results, 1-250 (default 20) |
 
+Each event carries `naddr` (NIP-19 addressable identifier) and, when
+`EDUFEED_APP_BASE_URL` is set, `url` (the edufeed-app viewer at `<base>/<naddr>`).
+Prefer citing `url` over `sourcePage`, since the viewer shows fuller event details.
+
 ### list_calendar_authors
 
 List known calendar event authors loaded from configured follow sets (NIP-51 kind 30000).

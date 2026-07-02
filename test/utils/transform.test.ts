@@ -99,6 +99,20 @@ describe('eventToAMBResource', () => {
     expect(result!.resource.isAccessibleForFree).toBe(true);
     expect(result!.resource.datePublished).toBe('2024-01-15');
   });
+
+  it('extracts mainEntityOfPage from http r tags', () => {
+    const event = createMockEvent(
+      [
+        ['name', 'Ein Erfahrungsbericht'],
+        ['r', 'https://www.e-teaching.org/praxis/foo'],
+      ],
+      'resource-1'
+    );
+    const result = eventToAMBResource(event);
+    expect(result!.resource.mainEntityOfPage).toEqual([
+      { id: 'https://www.e-teaching.org/praxis/foo' },
+    ]);
+  });
 });
 
 describe('eventsToAMBResources', () => {
@@ -164,6 +178,36 @@ describe('toSimplifiedResource', () => {
     expect(simplified.isAccessibleForFree).toBe(true);
     expect(simplified.datePublished).toBe('2024-01-15');
     expect(simplified.nostr.eventId).toBe('event123');
+  });
+
+  it('exposes sourcePage from the r tag', () => {
+    const event = createMockEvent(
+      [
+        ['name', 'Ein Erfahrungsbericht'],
+        ['r', 'https://www.e-teaching.org/praxis/foo'],
+      ],
+      '46d54fe5-21b2-41d3-8253-f8824f025864'
+    );
+    const simplified = toSimplifiedResource(eventToAMBResource(event)!);
+    expect(simplified.sourcePage).toBe('https://www.e-teaching.org/praxis/foo');
+  });
+
+  it('falls back to an http-shaped d-tag id for sourcePage when r is absent', () => {
+    const event = createMockEvent(
+      [['name', 'Ein Erfahrungsbericht']],
+      'https://www.e-teaching.org/praxis/foo'
+    );
+    const simplified = toSimplifiedResource(eventToAMBResource(event)!);
+    expect(simplified.sourcePage).toBe('https://www.e-teaching.org/praxis/foo');
+  });
+
+  it('leaves sourcePage undefined when there is no r tag and the id is not a URL', () => {
+    const event = createMockEvent(
+      [['name', 'UUID-identified resource']],
+      '46d54fe5-21b2-41d3-8253-f8824f025864'
+    );
+    const simplified = toSimplifiedResource(eventToAMBResource(event)!);
+    expect(simplified.sourcePage).toBeUndefined();
   });
 
   it('emits naddr for the resource', () => {

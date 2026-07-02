@@ -126,6 +126,12 @@ export function eventToAMBResource(event: NostrEvent): AMBResourceWithMetadata |
       return null;
     }
 
+    // The `r` tag mirrors mainEntityOfPage.id — the resource's original source
+    // page. Keep only http(s) values; a resource may carry several.
+    const mainEntityOfPage = getTags(event, 'r')
+      .filter((r) => /^https?:\/\//.test(r))
+      .map((id) => ({ id }));
+
     const resource: AmbLearningResourceBase = {
       '@context': ['https://schema.org/'],
       id: dTag,
@@ -156,6 +162,9 @@ export function eventToAMBResource(event: NostrEvent): AMBResourceWithMetadata |
       datePublished: getTag(event, 'datePublished'),
       dateCreated: getTag(event, 'dateCreated'),
       dateModified: getTag(event, 'dateModified'),
+
+      // Original source page(s), from the event's `r` tag(s)
+      mainEntityOfPage: mainEntityOfPage.length ? mainEntityOfPage : undefined,
     };
 
     return {
@@ -204,6 +213,12 @@ export function toSimplifiedResource(ambResource: AMBResourceWithMetadata, langu
   // result without the link fields.
   const { naddr, url } = encodeNaddrAndUrl(nostr.kind, nostr.pubkey, nostr.dTag);
 
+  // The resource's original source page: the first http(s) mainEntityOfPage
+  // (from the event's `r` tag), falling back to an http(s) d-tag id.
+  const sourcePage =
+    resource.mainEntityOfPage?.find((m) => /^https?:\/\//.test(m.id))?.id ??
+    (/^https?:\/\//.test(resource.id) ? resource.id : undefined);
+
   return {
     id: resource.id,
     identifier: resource.id,
@@ -211,6 +226,7 @@ export function toSimplifiedResource(ambResource: AMBResourceWithMetadata, langu
     name: resource.name,
     description: resource.description,
     url,
+    sourcePage,
 
     // Educational metadata — resolved to single-language strings
     learningResourceType: resource.learningResourceType
@@ -264,6 +280,13 @@ export interface SimplifiedAMBResource {
    * LLMs should cite this as a markdown link when recommending the resource.
    */
   url?: string;
+
+  /**
+   * Direct link to the resource's original source page, derived from the
+   * event's `r` tag (mainEntityOfPage), falling back to an http(s) d-tag id.
+   * LLMs should prefer this over `url` (the edufeed viewer) when citing.
+   */
+  sourcePage?: string;
 
   learningResourceType?: string[];
   educationalLevel?: string[];

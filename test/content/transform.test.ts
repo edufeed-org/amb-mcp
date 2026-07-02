@@ -136,7 +136,18 @@ describe('transformContentEvent — resource (30142)', () => {
     );
   });
 
-  it('leaves sourcePage undefined when the resource id is not a URL', () => {
+  it('surfaces the r-tag as sourcePage when the d-tag id is a bare UUID', () => {
+    const e = evt(30142, [
+      ['d', '46d54fe5-21b2-41d3-8253-f8824f025864'],
+      ['name', 'UUID-identified resource'],
+      ['r', 'https://www.e-teaching.org/praxis/foo'],
+    ]);
+    expect((transformContentEvent(e, 'de') as any).sourcePage).toBe(
+      'https://www.e-teaching.org/praxis/foo'
+    );
+  });
+
+  it('leaves sourcePage undefined when the resource id is not a URL and no r tag', () => {
     const e = evt(30142, [
       ['d', '46d54fe5-21b2-41d3-8253-f8824f025864'],
       ['name', 'UUID-identified resource'],

@@ -59,9 +59,9 @@ function resourceToContentResult(event: NostrEvent, language: string): ResourceR
     eventAuthor: eventAuthor(event.pubkey),
     createdAt: event.created_at,
   };
-  // The AMB `id` is often the resource's own external page — a direct source
-  // link — but can be a bare UUID/hash, so only surface http(s) values.
-  if (s.id && /^https?:\/\//.test(s.id)) result.sourcePage = s.id;
+  // Original source page: the event's `r` tag (mainEntityOfPage), with an
+  // http(s) d-tag id as fallback — computed once in toSimplifiedResource.
+  if (s.sourcePage) result.sourcePage = s.sourcePage;
   return result;
 }
 

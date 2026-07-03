@@ -20,49 +20,36 @@
 
 ---
 
-### Task 1: Add per-consumer client secrets to the vault
+### Task 1: Reuse the existing per-consumer client secrets from the vault
+
+> **Superseded during execution:** the original plan proposed adding two *new* vault
+> variables. That is unnecessary — the `edufeed-app` and `nope-chatbot` service-account
+> secrets are already vault-managed as `vault_keycloak_client_secret_edufeed_app` and
+> `vault_keycloak_client_secret_nope_chatbot` (defined in `roles/keycloak/defaults/main.yml`
+> and consumed by `roles/keycloak/templates/edufeed-realm.json.j2` to provision the very
+> clients we authenticate as). Reusing them keeps a single source of truth and needs no
+> interactive vault edit. This task is now just a verification gate.
 
 **Files:**
-- Modify (encrypted): `inventory/group_vars/all/vault.yml`
+- None modified. (Reuses existing vault variables.)
 
 **Interfaces:**
-- Produces: two new vault variables — `vault_edufeed_app_amb_mcp_client_secret` and `vault_nope_chatbot_amb_mcp_client_secret` — consumed by Tasks 2 and 3.
+- Produces: confirms `vault_keycloak_client_secret_edufeed_app` and `vault_keycloak_client_secret_nope_chatbot` are defined — consumed by Tasks 2 and 3.
 
-- [ ] **Step 1: Retrieve the two client secrets from Keycloak (user-driven)**
-
-The secrets are the `edufeed-app` and `nope-chatbot` service-account client secrets from the `edufeed` realm (Keycloak Admin → Clients → *client* → Credentials). This step is the user's — the agent must NOT fetch or handle live secrets. Ask the user to have both values ready for the vault edit.
-
-- [ ] **Step 2: Add the variables to the vault**
-
-The vault is encrypted; edit it interactively (the agent cannot decrypt it). Have the user run:
-
-```bash
-cd /home/laoc/coding/homelab
-ansible-vault edit inventory/group_vars/all/vault.yml
-```
-
-Add two entries (keeping the existing `vault_amb_mcp_bearer_token` untouched until Task 4):
-
-```yaml
-vault_edufeed_app_amb_mcp_client_secret: "<edufeed-app service-account secret>"
-vault_nope_chatbot_amb_mcp_client_secret: "<nope-chatbot service-account secret>"
-```
-
-- [ ] **Step 3: Verify the variables decrypt and are visible to the inventory**
+- [ ] **Step 1: Verify the existing secrets decrypt and are visible to the inventory**
 
 Run (prints only whether the keys exist, never the values):
 
 ```bash
 ansible -i inventory localhost -m debug \
-  -a "msg={{ (vault_edufeed_app_amb_mcp_client_secret is defined) and (vault_nope_chatbot_amb_mcp_client_secret is defined) }}" \
-  --ask-vault-pass
+  -a "msg={{ (vault_keycloak_client_secret_edufeed_app is defined) and (vault_keycloak_client_secret_nope_chatbot is defined) }}"
 ```
 
-Expected: `"msg": true`. If `false`, the keys were mis-typed in the vault.
+Expected: `"msg": true` (vault password is read non-interactively via `ansible.cfg`'s `vault_password_file`). If `false`, the realm's client provisioning is also broken — stop and investigate the keycloak role before proceeding.
 
-- [ ] **Step 4: No git commit**
+- [ ] **Step 2: No git commit**
 
-`vault.yml` changes are committed together with the templates that use them (Tasks 2-3) so the deploy is atomic. Nothing to commit in this task.
+Nothing changes in this task — the secrets already exist.
 
 ---
 
@@ -72,7 +59,7 @@ Expected: `"msg": true`. If `false`, the keys were mis-typed in the vault.
 - Modify: `playbooks/deploy_edufeed_app.yml` (three AMB MCP env blocks — around lines 257-258, 586-587, 1058-1059)
 
 **Interfaces:**
-- Consumes: `vault_edufeed_app_amb_mcp_client_secret` (Task 1).
+- Consumes: `vault_keycloak_client_secret_edufeed_app` (Task 1).
 - Produces: env vars `AMB_MCP_TOKEN_URL`, `AMB_MCP_CLIENT_ID`, `AMB_MCP_CLIENT_SECRET`, `AMB_MCP_SCOPE` for the edufeed-app container; matches the variables `src/lib/server/ambMcpToken.js` reads (see `2026-07-02-plan-c-edufeed-app-client-credentials.md`).
 
 - [ ] **Step 1: Replace all three AMB MCP env blocks**
@@ -90,7 +77,7 @@ with:
       AMB_MCP_URL=https://mcp.amb.edufeed.org/mcp
       AMB_MCP_TOKEN_URL=https://auth.edufeed.org/realms/edufeed/protocol/openid-connect/token
       AMB_MCP_CLIENT_ID=edufeed-app
-      AMB_MCP_CLIENT_SECRET={{ vault_edufeed_app_amb_mcp_client_secret }}
+      AMB_MCP_CLIENT_SECRET={{ vault_keycloak_client_secret_edufeed_app }}
       AMB_MCP_SCOPE=mcp:read mcp:extract
 ```
 
@@ -109,7 +96,7 @@ Run:
 ansible-playbook -i inventory playbooks/deploy_edufeed_app.yml --check --diff --ask-vault-pass
 ```
 
-Expected: the diff shows the new `AMB_MCP_TOKEN_URL`/`AMB_MCP_CLIENT_ID`/`AMB_MCP_CLIENT_SECRET`/`AMB_MCP_SCOPE` lines and the removal of `AMB_MCP_BEARER_TOKEN`, with the secret masked/rendered from the vault. No template errors (an undefined `vault_edufeed_app_amb_mcp_client_secret` would fail here → go back to Task 1).
+Expected: the diff shows the new `AMB_MCP_TOKEN_URL`/`AMB_MCP_CLIENT_ID`/`AMB_MCP_CLIENT_SECRET`/`AMB_MCP_SCOPE` lines and the removal of `AMB_MCP_BEARER_TOKEN`, with the secret masked/rendered from the vault. No template errors (an undefined `vault_keycloak_client_secret_edufeed_app` would fail here → go back to Task 1).
 
 - [ ] **Step 3: GATE — get user confirmation, then apply**
 
@@ -138,7 +125,7 @@ git commit -m "feat(edufeed-app): authenticate to amb-mcp via Keycloak client-cr
 - Modify: `roles/nope-chatbot/templates/env.j2` (lines 19-20)
 
 **Interfaces:**
-- Consumes: `vault_nope_chatbot_amb_mcp_client_secret` (Task 1).
+- Consumes: `vault_keycloak_client_secret_nope_chatbot` (Task 1).
 - Produces: env vars `AMB_MCP_TOKEN_URL`, `AMB_MCP_CLIENT_ID`, `AMB_MCP_CLIENT_SECRET`, `AMB_MCP_SCOPE` for the chatbot container; the chatbot's `mcp-servers.json` `oauth` block resolves these via env substitution (see `2026-07-02-plan-c-chatbot-client-credentials.md`).
 
 - [ ] **Step 1: Replace the AMB MCP env block**
@@ -156,7 +143,7 @@ with:
 AMB_MCP_URL=https://mcp.amb.edufeed.org/mcp
 AMB_MCP_TOKEN_URL=https://auth.edufeed.org/realms/edufeed/protocol/openid-connect/token
 AMB_MCP_CLIENT_ID=nope-chatbot
-AMB_MCP_CLIENT_SECRET={{ vault_nope_chatbot_amb_mcp_client_secret }}
+AMB_MCP_CLIENT_SECRET={{ vault_keycloak_client_secret_nope_chatbot }}
 AMB_MCP_SCOPE=mcp:read mcp:extract
 ```
 
@@ -263,4 +250,4 @@ git commit -m "chore(amb-mcp): drop LEGACY_BEARER_TOKEN after client-credentials
 
 - **Spec coverage:** The spec's "homelab: env swap" maps to Tasks 1-3 (per-consumer secrets + client-credentials env), and the spec's "remove legacy LAST" ordering maps to Task 4 with an explicit precondition tying it to the amb-mcp code-drop plan. The zero-downtime sequencing (consumers first → verify → legacy last) is enforced by task order + the Task 4 precondition + the Global Constraints deploy gates.
 - **Placeholder scan:** Exact files, line ranges, literal before/after blocks, and exact verification commands are given. The only non-literals are (a) the two secret *values*, which are intentionally user-supplied via `ansible-vault edit` (never in the plan), and (b) two deploy playbook filenames flagged with a `grep -rl` fallback to resolve them — a deliberate lookup, not a vague placeholder.
-- **Type consistency:** The env var names produced here (`AMB_MCP_TOKEN_URL`, `AMB_MCP_CLIENT_ID`, `AMB_MCP_CLIENT_SECRET`, `AMB_MCP_SCOPE`) match exactly what the two consumer plans' token providers read. The vault var names (`vault_edufeed_app_amb_mcp_client_secret`, `vault_nope_chatbot_amb_mcp_client_secret`) are defined in Task 1 and referenced verbatim in Tasks 2-3. `vault_amb_mcp_bearer_token` is removed only in Task 4, after its last consumer reference is gone.
+- **Type consistency:** The env var names produced here (`AMB_MCP_TOKEN_URL`, `AMB_MCP_CLIENT_ID`, `AMB_MCP_CLIENT_SECRET`, `AMB_MCP_SCOPE`) match exactly what the two consumer plans' token providers read. The vault var names (`vault_keycloak_client_secret_edufeed_app`, `vault_keycloak_client_secret_nope_chatbot`) are defined in Task 1 and referenced verbatim in Tasks 2-3. `vault_amb_mcp_bearer_token` is removed only in Task 4, after its last consumer reference is gone.

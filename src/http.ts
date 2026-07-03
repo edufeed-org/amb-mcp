@@ -45,7 +45,6 @@ const OAUTH_JWKS_URI =
   process.env.OAUTH_JWKS_URI || `${OAUTH_ISSUER}/protocol/openid-connect/certs`;
 const OAUTH_RESOURCE_URL =
   process.env.OAUTH_RESOURCE_URL || 'https://mcp.amb.edufeed.org/mcp';
-const LEGACY_BEARER_TOKEN = process.env.LEGACY_BEARER_TOKEN || undefined; // transitional
 const HTTP_ALLOWED_HOSTS = process.env.HTTP_ALLOWED_HOSTS?.split(',').map((s) => s.trim()).filter(Boolean);
 const HTTP_ALLOWED_ORIGINS = process.env.HTTP_ALLOWED_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean);
 
@@ -54,7 +53,7 @@ async function main() {
   console.log(`AMB Relays: ${AMB_RELAYS.join(', ')}`);
   console.log(`Calendar Relays: ${CALENDAR_RELAYS.join(', ')}`);
   console.log(`HTTP bind: ${HTTP_HOST}:${HTTP_PORT}`);
-  console.log(`Auth: OAuth (issuer ${OAUTH_ISSUER})${LEGACY_BEARER_TOKEN ? ' + legacy bearer' : ''}`);
+  console.log(`Auth: OAuth (issuer ${OAUTH_ISSUER})`);
   if (HTTP_ALLOWED_HOSTS?.length) console.log(`Allowed hosts: ${HTTP_ALLOWED_HOSTS.join(', ')}`);
   if (HTTP_ALLOWED_ORIGINS?.length) console.log(`Allowed origins: ${HTTP_ALLOWED_ORIGINS.join(', ')}`);
 
@@ -97,7 +96,6 @@ async function main() {
       issuer: OAUTH_ISSUER,
       scopes: ['mcp:read', 'mcp:extract'],
     },
-    legacyBearerToken: LEGACY_BEARER_TOKEN,
     allowedHosts: HTTP_ALLOWED_HOSTS,
     allowedOrigins: HTTP_ALLOWED_ORIGINS,
     serverName: SERVER_NAME,

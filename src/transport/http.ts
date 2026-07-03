@@ -13,7 +13,7 @@
  * /.well-known/oauth-protected-resource (RFC 9728).
  */
 
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 
 import express, { type Request, type Response, type NextFunction } from 'express';
@@ -37,8 +37,6 @@ export interface HttpServerOptions {
     issuer: string;
     scopes: string[];
   };
-  /** Transitional: also accept this static bearer during migration. Remove post-rollout. */
-  legacyBearerToken?: string;
   /** Host header allow-list for DNS-rebinding protection. */
   allowedHosts?: string[];
   /** Origin allow-list for DNS-rebinding protection. */
@@ -73,8 +71,6 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
     serverName = 'amb-mcp',
     serverVersion = '0.0.0',
   } = opts;
-
-  const legacyBearerToken = opts.legacyBearerToken;
 
   const app = express();
   app.use(express.json({ limit: '4mb' }));
@@ -123,17 +119,7 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
       return next();
     }
 
-    // Transitional static bearer → full read+extract.
-    if (legacyBearerToken) {
-      const a = Buffer.from(token);
-      const b = Buffer.from(legacyBearerToken);
-      if (a.length === b.length && timingSafeEqual(a, b)) {
-        res.locals.scopes = ['mcp:read', 'mcp:extract'];
-        return next();
-      }
-    }
-
-    // A token was supplied but is not the legacy one → it must be a valid JWT.
+    // A token was supplied → it must be a valid JWT.
     if (!opts.auth) {
       res.setHeader('WWW-Authenticate', challenge);
       return res.status(401).json({ jsonrpc: '2.0', error: { code: -32001, message: 'Unauthorized' }, id: null });

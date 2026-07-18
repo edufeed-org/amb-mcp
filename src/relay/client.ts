@@ -104,10 +104,10 @@ export class AMBRelayClient {
   /**
    * Get a single event by its ID
    */
-  async getById(eventId: string): Promise<NostrEvent | null> {
+  async getById(eventId: string, kinds: number[] = [30142]): Promise<NostrEvent | null> {
     const events = await this.queryRelays({
       ids: [eventId],
-      kinds: [30142],
+      kinds,
     });
     return events[0] ?? null;
   }
@@ -115,9 +115,9 @@ export class AMBRelayClient {
   /**
    * Get a single event by d-tag (and optionally author)
    */
-  async getByDTag(dTag: string, author?: string): Promise<NostrEvent | null> {
+  async getByDTag(dTag: string, author?: string, kinds: number[] = [30142]): Promise<NostrEvent | null> {
     const filter: Filter = {
-      kinds: [30142],
+      kinds,
       '#d': [dTag],
     };
     if (author) {

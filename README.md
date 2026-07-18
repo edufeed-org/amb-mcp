@@ -5,7 +5,7 @@ An MCP (Model Context Protocol) server for querying educational resources from A
 ## Features
 
 ### Query & Browse
-- Cross-content full-text search (`search_content`) across educational resources, long-form articles, and wikis in one ranked call
+- Cross-content full-text search (`search_content`) across educational resources, long-form articles, wikis, transferkiosk projects/measures, and NKBIP-01 scientific publications in one ranked call
 - Semantic snippet passages from chunk re-ranking surfaced per result when the relay's re-ranking is active
 - Full-text search with NIP-50
 - Filter by publisher, creator, subject, resource type, educational level
@@ -144,23 +144,34 @@ It speaks the same streamable-HTTP protocol as the local server. **Read tools ar
 ### search_content
 
 Topic search across **all** content types in one ranked call — educational
-resources (30142), long-form articles (30023), and wikis (30818). Results are
-interleaved and ranked by semantic passage match; each carries the matched
-passage (`snippet`) when the relay's chunk re-ranking is active. This is the
-default entry point for natural-language questions.
+resources (30142), long-form articles (30023), wikis (30818), transferkiosk
+projects (30143), transferkiosk measures (30144), and NKBIP-01 scientific
+publications (30040 indices + 30041 sections — academic articles, books).
+Results are interleaved and ranked by semantic passage match; each carries
+the matched passage (`snippet`) when the relay's chunk re-ranking is active.
+This is the default entry point for natural-language questions.
 
 Parameters:
 | Name | Type | Description |
 |------|------|-------------|
 | `query` | string | Free-text topic |
-| `types` | string[] | Subset of `["resource","article","wiki"]` (default: all) |
+| `types` | string[] | Subset of `["resource","article","wiki","project","measure","publication"]` (default: all) |
 | `language` | string | Label language (default `de`) |
 | `since` / `until` | number | Unix timestamp bounds |
 | `authors` | string[] | Author pubkeys (hex) |
 | `limit` | number | Max results, 1-250 (default 20) |
+| `community` | string | Return content shared into this community (hex pubkey or npub) |
 
 Each result: `{ type, kind, title, url?, naddr?, snippet?, score?, ...type-specific }`.
 For upcoming events on the same topic, follow up with `search_calendar_events`.
+
+**Facet-in-query syntax:** relay-side facets ride inside `query` as NIP-50
+field filters rather than as separate parameters — append them to the
+free-text term and the relay resolves them server-side. Examples: `type:academic`
+(publication display type), `doi:10.1234/abcd.5678` (bare DOI, no `doi:` prefix
+in the stored value), `keywords:<term>` (topic words), or `partOf:30143:<pubkey>:<d>` (publications/measures that
+belong to a given project coord). These can be combined with a topic term,
+e.g. `query: "seminardidaktik partOf:30143:<pubkey>:<d>"`.
 
 ### search_resources
 
@@ -180,14 +191,21 @@ Parameters:
 
 ### get_resource
 
-Retrieve a single resource by identifier.
+Retrieve a single piece of content by naddr, d-tag identifier, or event ID.
+An naddr from any `search_content` result resolves — resources, articles,
+wikis, projects, measures, and publications alike; non-resource kinds come
+back in the same shape as their `search_content` result (`{ type, kind,
+title, ... }`), not the full AMB resource shape. A bare `identifier`/`eventId`
+lookup (no `naddr`) always resolves the full educational-resource metadata
+(kind 30142), including creator/publisher and educational properties.
 
 Parameters:
 | Name | Type | Description |
 |------|------|-------------|
-| `identifier` | string | Resource d-tag (URL identifier) |
+| `identifier` | string | Resource d-tag (URL identifier) — resolves kind 30142 only |
 | `author` | string | Author pubkey for disambiguation |
-| `eventId` | string | Direct Nostr event ID lookup |
+| `eventId` | string | Direct Nostr event ID lookup — resolves kind 30142 only |
+| `naddr` | string | NIP-19 naddr from a `search_content` result — preferred; works for any content type |
 
 #### Response shape (search_resources and get_resource)
 

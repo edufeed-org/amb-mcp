@@ -132,13 +132,13 @@ function escapeSearchValue(value: string): string {
   return value;
 }
 
-const CONTENT_TYPE_KINDS: Record<ContentType, number> = {
-  resource: 30142,
-  article: 30023,
-  wiki: 30818,
-  project: 30143,
-  measure: 30144,
-  publication: 30145,
+const CONTENT_TYPE_KINDS: Record<ContentType, number[]> = {
+  resource: [30142],
+  article: [30023],
+  wiki: [30818],
+  project: [30143],
+  measure: [30144],
+  publication: [30040, 30041],
 };
 
 export interface ContentSearchParams {
@@ -164,7 +164,7 @@ export function buildContentFilter(params: ContentSearchParams): Filter {
   const types: ContentType[] = params.types?.length
     ? params.types
     : (['resource', 'article', 'wiki', 'project', 'measure', 'publication'] as ContentType[]);
-  const kinds = types.map((t) => CONTENT_TYPE_KINDS[t]);
+  const kinds = types.flatMap((t) => CONTENT_TYPE_KINDS[t]);
   kinds.push(SNIPPET_KIND);
 
   const filter: Filter = { kinds, limit };

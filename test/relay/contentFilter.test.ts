@@ -6,7 +6,7 @@ describe('buildContentFilter', () => {
   it('defaults to all content kinds plus the 21142 snippet kind', () => {
     const f = buildContentFilter({});
     expect(new Set(f.kinds)).toEqual(
-      new Set([30142, 30023, 30818, 30143, 30144, 30145, 21142])
+      new Set([30142, 30023, 30818, 30143, 30144, 30040, 30041, 21142])
     );
     expect(f.limit).toBe(20);
     expect(f.search).toBeUndefined();
@@ -19,7 +19,12 @@ describe('buildContentFilter', () => {
 
   it('maps the transferkiosk types to their kinds (plus 21142)', () => {
     const f = buildContentFilter({ types: ['project', 'measure', 'publication'] });
-    expect(new Set(f.kinds)).toEqual(new Set([30143, 30144, 30145, 21142]));
+    expect(new Set(f.kinds)).toEqual(new Set([30143, 30144, 30040, 30041, 21142]));
+  });
+
+  it('maps types:["publication"] to both NKBIP-01 kinds', () => {
+    const filter = buildContentFilter({ types: ['publication'] });
+    expect(filter.kinds).toEqual([30040, 30041, 21142]);
   });
 
   it('sets the NIP-50 search string from query', () => {

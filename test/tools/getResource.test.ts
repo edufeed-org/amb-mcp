@@ -74,4 +74,20 @@ describe('runGetResource kind dispatch', () => {
     expect(out.error).toMatch(/kind 31337/);
     expect(client.calls.length).toBe(0);
   });
+
+  it('prefers eventId over naddr when both are supplied (pre-refactor behavior)', async () => {
+    const event = {
+      id: 'byid', pubkey: author, created_at: 1700000000, kind: 30142, sig: 's', content: '{}',
+      tags: [['d', 'https://example.org/r']],
+    };
+    const calls: any[] = [];
+    const client = {
+      calls,
+      getById: async () => { calls.push('getById'); return event; },
+      getByDTag: async () => { calls.push('getByDTag'); return null; },
+    };
+    const naddr = nip19.naddrEncode({ kind: 30040, pubkey: author, identifier: 'x', relays: [] });
+    await runGetResource(client, { eventId: 'byid', naddr });
+    expect(calls).toEqual(['getById']);
+  });
 });

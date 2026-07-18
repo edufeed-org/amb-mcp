@@ -52,6 +52,12 @@ export async function runGetResource(
   }
   const lang = params.language || 'de';
 
+  // Priority order: eventId > naddr > identifier (restores pre-refactor behavior)
+  if (params.eventId) {
+    const event = await client.getById(params.eventId);
+    return formatAMB(event, lang);
+  }
+
   if (params.naddr) {
     const lookup = naddrToLookup(params.naddr);
     if (!lookup) return { error: 'Invalid naddr', resource: null };
@@ -70,9 +76,7 @@ export async function runGetResource(
     return formatAMB(event, lang);
   }
 
-  const event = params.eventId
-    ? await client.getById(params.eventId)
-    : await client.getByDTag(params.identifier!, params.author);
+  const event = await client.getByDTag(params.identifier!, params.author);
   return formatAMB(event, lang);
 }
 

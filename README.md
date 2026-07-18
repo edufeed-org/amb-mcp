@@ -169,7 +169,7 @@ For upcoming events on the same topic, follow up with `search_calendar_events`.
 field filters rather than as separate parameters — append them to the
 free-text term and the relay resolves them server-side. Examples: `type:academic`
 (publication display type), `doi:10.1234/abcd.5678` (bare DOI, no `doi:` prefix
-in the stored value), `partOf:30143:<pubkey>:<d>` (publications/measures that
+in the stored value), `keywords:<term>` (topic words), or `partOf:30143:<pubkey>:<d>` (publications/measures that
 belong to a given project coord). These can be combined with a topic term,
 e.g. `query: "seminardidaktik partOf:30143:<pubkey>:<d>"`.
 

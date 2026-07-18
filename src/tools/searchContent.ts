@@ -58,7 +58,7 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
         'do not treat eventAuthor as the publisher. For full metadata (license, ' +
         'dates, complete entity lists) pass a result\'s naddr to get_resource. ' +
         'Publication facets ride inside the query string as NIP-50 field filters: ' +
-        'append type:academic, doi:10.1234/abcd.5678, or partOf:30143:<pubkey>:<d> ' +
+        'append type:academic, doi:10.1234/abcd.5678, keywords:<term>, or partOf:30143:<pubkey>:<d> ' +
         '("publications of a project") to the query — the relay resolves them server-side. ' +
         'When presenting results to the user, render each as a markdown link so ' +
         'they can open it directly — prefer sourcePage (the original external ' +

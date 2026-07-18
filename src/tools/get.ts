@@ -63,7 +63,10 @@ export async function runGetResource(
     if (!lookup) return { error: 'Invalid naddr', resource: null };
     if (lookup.kind !== 30142) {
       if (!hasContentTransform(lookup.kind)) {
-        return { error: `naddr kind ${lookup.kind} is not served by this server`, resource: null };
+        const hint = [31922, 31923, 31924, 31925].includes(lookup.kind)
+          ? ' For calendar events use search_calendar_events.'
+          : '';
+        return { error: `naddr kind ${lookup.kind} cannot be resolved by get_resource on this server.${hint}`, resource: null };
       }
       const event = await client.getByDTag(lookup.identifier, lookup.author, [lookup.kind]);
       if (!event) return { resource: null, message: 'Resource not found' };

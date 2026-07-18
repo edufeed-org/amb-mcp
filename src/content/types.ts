@@ -110,7 +110,7 @@ export interface PublicationResult extends ContentResultBase {
   keywords?: string[];
   language?: string;
   license?: string;
-  /** Coords of a-tags marked isPartOf/isOutputOf (e.g. parent project). */
+  /** Coords of a-tags marked isPartOf/isOutputOf (e.g. parent project). Note: array-valued here (a publication can be output of several projects); Project/Measure partOf is a single string. */
   partOf?: string[];
   /** Coords of the publication's parts (bare or event-id-hinted a-tags). */
   sections?: string[];

@@ -60,4 +60,20 @@ describe('runContentSearch', () => {
     const out = await runContentSearch(fakeClient([]), { query: 'x' });
     expect(out).toEqual({ total: 0, results: [] });
   });
+
+  it('surfaces publication indices and sections with their snippets', async () => {
+    const pub = evt(30040, 'pub1', [
+      ['d', 'tk-p1-pub2'],
+      ['title', 'Digitale Prüfungen'],
+      ['type', 'academic'],
+      ['i', 'doi:10.1/x'],
+    ]);
+    const pubSnip = evt(21142, 'snip-pub1', [['e', 'pub1'], ['k', '30040'], ['score', '0.9']], 'passage P');
+    const section = evt(30041, 'sec1', [['d', 'ch-1'], ['title', 'Kapitel 1']], 'section body text');
+    const out = await runContentSearch(fakeClient([pub, pubSnip, section]), { query: 'prüfungen' });
+    expect(out.total).toBe(2);
+    expect(out.results.map((r) => r.kind)).toEqual([30040, 30041]);
+    expect(out.results[0].type).toBe('publication');
+    expect(out.results[0].snippet).toBe('passage P');
+  });
 });

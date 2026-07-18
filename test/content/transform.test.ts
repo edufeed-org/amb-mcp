@@ -172,7 +172,7 @@ describe('transformContentEvent — resource (30142)', () => {
   });
 });
 
-describe('transformContentEvent — transferkiosk (30143/30144/30145)', () => {
+describe('transformContentEvent — transferkiosk (30143/30144)', () => {
   it('projects a Projekt (30143): title from name, description, excerpt', () => {
     const e = evt(
       30143,
@@ -224,31 +224,6 @@ describe('transformContentEvent — transferkiosk (30143/30144/30145)', () => {
     );
   });
 
-  it('projects a Publikation (30145) and reads partOf from an isOutputOf marker', () => {
-    const e = evt(
-      30145,
-      [
-        ['d', 'https://doi.org/10.25673/103431'],
-        ['type', 'ScholarlyArticle'],
-        ['name', 'Ergebnisse der studentischen Partizipation'],
-        [
-          'a',
-          '30143:d2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612:https://transferkiosk.net/p/101323',
-          'wss://relay.edufeed.org',
-          'isOutputOf',
-        ],
-      ],
-      'Dieser Beitrag dokumentiert die Ergebnisse.'
-    );
-    const r = transformContentEvent(e, 'de');
-    expect(r!.type).toBe('publication');
-    expect(r!.kind).toBe(30145);
-    expect(r!.title).toBe('Ergebnisse der studentischen Partizipation');
-    expect((r as any).partOf).toBe(
-      '30143:d2689e2f41dabfba953da26655a94ce2aa4e029c383ee921c6a4deafab99a612:https://transferkiosk.net/p/101323'
-    );
-  });
-
   it('exposes sourcePage from the r tag', () => {
     const e = evt(30143, [
       ['d', 'https://transferkiosk.net/p/101472'],
@@ -276,20 +251,6 @@ describe('transformContentEvent — transferkiosk (30143/30144/30145)', () => {
       ['name', 'Non-URL identifier'],
     ]);
     expect((transformContentEvent(e, 'de') as any).sourcePage).toBeUndefined();
-  });
-
-  it('exposes a publication identifier from the i tag', () => {
-    const e = evt(30145, [
-      ['d', 'https://transferkiosk.net/p/101697/pub/100541'],
-      ['name', 'Ein Aufsatz'],
-      ['r', 'https://transferkiosk.net/p/101697/pub/100541'],
-      ['i', 'https://doi.org/10.11576/hlz-7233'],
-    ]);
-    const r = transformContentEvent(e, 'de');
-    expect((r as any).identifier).toBe('https://doi.org/10.11576/hlz-7233');
-    expect((r as any).sourcePage).toBe(
-      'https://transferkiosk.net/p/101697/pub/100541'
-    );
   });
 
   it('returns null when the name tag is missing (relay requires d + name)', () => {
@@ -328,5 +289,89 @@ describe('excerpt capping', () => {
     const ex = (r as any).excerpt as string;
     expect(ex.length).toBeLessThanOrEqual(301);
     expect(ex.endsWith('…')).toBe(true);
+  });
+});
+
+describe('publicationToContentResult (NKBIP-01 30040/30041)', () => {
+  const hex64 = 'ab'.repeat(32);
+
+  it('projects a migrated transferkiosk-shape 30040', () => {
+    const e = evt(30040, [
+      ['d', 'tk-p101658-pub100021'],
+      ['title', 'Die Materialität analog-digitaler Schnittstellen'],
+      ['type', 'academic'],
+      ['additionalType', 'ScholarlyArticle'],
+      ['summary', 'Usability-Testung Stift-basierter Eingabegeräte.'],
+      ['author', 'Nadine Hahm'],
+      ['author', 'Andreas Thor'],
+      ['creator:type', 'Person'],
+      ['creator:name', 'Nadine Hahm'],
+      ['i', 'doi:10.25673/103431.2'],
+      ['source', 'https://transferkiosk.net/p/101658/pub/1'],
+      ['published_on', '2023-01-01'],
+      ['published_by', 'Open Access Publikation'],
+      ['inLanguage', 'de'],
+      ['license:id', 'https://creativecommons.org/licenses/by/4.0/'],
+      ['a', '30143:' + hex64 + ':https://transferkiosk.net/p/101658', 'wss://r', 'isOutputOf'],
+      ['a', '39738:' + hex64 + ':tk-publikationsart/100009', 'wss://r', 'publicationType'],
+    ]);
+    const r = transformContentEvent(e)!;
+    expect(r.type).toBe('publication');
+    if (r.type !== 'publication') return;
+    expect(r.kind).toBe(30040);
+    expect(r.title).toBe('Die Materialität analog-digitaler Schnittstellen');
+    expect(r.summary).toContain('Usability');
+    expect(r.authors).toEqual(['Nadine Hahm', 'Andreas Thor']);
+    expect(r.doi).toBe('10.25673/103431.2');
+    expect(r.identifier).toBe('doi:10.25673/103431.2');
+    expect(r.publicationType).toBe('academic');
+    expect(r.additionalType).toBe('ScholarlyArticle');
+    expect(r.publishedOn).toBe('2023-01-01');
+    expect(r.publishedBy).toBe('Open Access Publikation');
+    expect(r.sourcePage).toBe('https://transferkiosk.net/p/101658/pub/1');
+    expect(r.language).toBe('de');
+    expect(r.license).toBe('https://creativecommons.org/licenses/by/4.0/');
+    // isOutputOf → partOf; vocab word marker → neither facet
+    expect(r.partOf).toEqual(['30143:' + hex64 + ':https://transferkiosk.net/p/101658']);
+    expect(r.sections).toBeUndefined();
+    expect(r.naddr).toBeTruthy();
+  });
+
+  it('projects a wild Alexandria-shape 30040 (bare + event-id-hinted sections)', () => {
+    const e = evt(30040, [
+      ['d', 'aesops-fables'],
+      ['title', "Aesop's Fables"],
+      ['author', 'Aesop'],
+      ['i', 'isbn:9780765382030'],
+      ['a', '30041:' + hex64 + ':chapter-1', 'wss://r'],
+      ['a', '30041:' + hex64 + ':chapter-2', 'wss://r', hex64],
+    ]);
+    const r = transformContentEvent(e)!;
+    if (r.type !== 'publication') throw new Error('wrong type');
+    expect(r.doi).toBeUndefined();
+    expect(r.identifier).toBe('isbn:9780765382030');
+    expect(r.sections).toEqual([
+      '30041:' + hex64 + ':chapter-1',
+      '30041:' + hex64 + ':chapter-2',
+    ]);
+    expect(r.partOf).toBeUndefined();
+  });
+
+  it('projects a 30041 section with a body excerpt', () => {
+    const e = evt(
+      30041,
+      [['d', 'chapter-1'], ['title', 'The Farmer and The Snake']],
+      'ONE WINTER a Farmer found a Snake stiff and frozen with cold.'
+    );
+    const r = transformContentEvent(e)!;
+    if (r.type !== 'publication') throw new Error('wrong type');
+    expect(r.kind).toBe(30041);
+    expect(r.excerpt).toContain('ONE WINTER a Farmer');
+    expect(r.summary).toBeUndefined();
+  });
+
+  it('no longer transforms kind 30145 (retired)', () => {
+    const e = evt(30145, [['d', 'x'], ['name', 'Old Pub']]);
+    expect(transformContentEvent(e)).toBeNull();
   });
 });

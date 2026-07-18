@@ -62,16 +62,16 @@ export interface WikiResult extends ContentResultBase {
 }
 
 /**
- * NIP-DIDACTIC transferkiosk content (kinds 30143 Projekt / 30144 Maßnahme /
- * 30145 Publikation). All three share the same projected shape; `partOf`
- * carries the parent project coord (`30143:<pub>:<d>`) for measures and
- * publications, and is absent on root projects.
+ * NIP-DIDACTIC transferkiosk content (kinds 30143 Projekt / 30144 Maßnahme).
+ * `partOf` carries the parent project coord (`30143:<pub>:<d>`) for measures
+ * and is absent on root projects. Publikationen migrated to NKBIP-01 kind
+ * 30040 (see PublicationResult).
  */
 interface TransferkioskResultBase extends ContentResultBase {
   description?: string;
   summary?: string;
   excerpt?: string;
-  /** Parent project coord `30143:<pub>:<d>` (measures/publications only). */
+  /** Parent project coord `30143:<pub>:<d>` (measures only). */
   partOf?: string;
 }
 
@@ -85,11 +85,35 @@ export interface MeasureResult extends TransferkioskResultBase {
   kind: 30144;
 }
 
-export interface PublicationResult extends TransferkioskResultBase {
+/**
+ * NKBIP-01 curated publication: kind 30040 (index — bibliographic metadata
+ * in tags) or 30041 (section — chapter body in content). Sparse: section
+ * results carry title + excerpt; index results carry the metadata fields.
+ */
+export interface PublicationResult extends ContentResultBase {
   type: 'publication';
-  kind: 30145;
-  /** Canonical identifier (DOI or ISBN), from the `i` tag, when present. */
+  kind: 30040 | 30041;
+  summary?: string;
+  excerpt?: string;
+  /** Plain author display names (`author` tags). */
+  authors?: string[];
+  /** Bare DOI code, `doi:` prefix stripped from the `i` tag. */
+  doi?: string;
+  /** Raw external identifier (`i` tag) — doi:/isbn:/URN as published. */
   identifier?: string;
+  /** NKBIP-01 display type: academic, book, magazine, … (`type` tag). */
+  publicationType?: string;
+  /** schema.org type extension tag (ScholarlyArticle, Book, Chapter). */
+  additionalType?: string;
+  publishedOn?: string;
+  publishedBy?: string;
+  keywords?: string[];
+  language?: string;
+  license?: string;
+  /** Coords of a-tags marked isPartOf/isOutputOf (e.g. parent project). */
+  partOf?: string[];
+  /** Coords of the publication's parts (bare or event-id-hinted a-tags). */
+  sections?: string[];
 }
 
 export type SimplifiedContentResult =

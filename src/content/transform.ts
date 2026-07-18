@@ -119,16 +119,16 @@ function wikiToContentResult(event: NostrEvent): WikiResult | null {
 }
 
 /**
- * Project the three NIP-DIDACTIC transferkiosk kinds (30143/30144/30145).
- * The relay requires both `d` and `name`, so a missing either drops the
- * event. `partOf` carries the parent project coord from an `a` tag marked
- * `isPartOf` (measures) or `isOutputOf` (publications).
+ * Project the two NIP-DIDACTIC transferkiosk kinds (30143/30144). The relay
+ * requires both `d` and `name`, so a missing either drops the event.
+ * `partOf` carries the parent project coord from an `a` tag marked
+ * `isPartOf` (measures).
  */
 function transferkioskToContentResult(
   event: NostrEvent,
-  type: 'project' | 'measure' | 'publication',
-  kind: 30143 | 30144 | 30145
-): ProjectResult | MeasureResult | PublicationResult | null {
+  type: 'project' | 'measure',
+  kind: 30143 | 30144
+): ProjectResult | MeasureResult | null {
   const d = tag(event, 'd');
   const name = tag(event, 'name');
   if (!d || !name) return null;
@@ -141,7 +141,7 @@ function transferkioskToContentResult(
     url,
     eventAuthor: eventAuthor(event.pubkey),
     createdAt: event.created_at,
-  } as ProjectResult | MeasureResult | PublicationResult;
+  } as ProjectResult | MeasureResult;
   const description = tag(event, 'description');
   if (description) result.description = description;
   const summary = tag(event, 'summary');
@@ -154,12 +154,80 @@ function transferkioskToContentResult(
     tagValues(event, 'r').find((r) => /^https?:\/\//.test(r)) ??
     (/^https?:\/\//.test(d) ? d : undefined);
   if (sourcePage) result.sourcePage = sourcePage;
-  if (type === 'publication') {
-    const identifier = tag(event, 'i');
-    if (identifier) (result as PublicationResult).identifier = identifier;
-  }
   const ex = excerpt(event.content);
   if (ex) result.excerpt = ex;
+  return result;
+}
+
+/** 64-char hex — the shape of an NKBIP-01 optional event-id hint in an a-tag's 4th position. */
+function isHex64(s: string): boolean {
+  return /^[0-9a-fA-F]{64}$/.test(s);
+}
+
+/**
+ * NKBIP-01 publication: kind 30040 (index) or 30041 (section). Mirrors the
+ * relay's a-tag marker rule: isPartOf/isOutputOf → partOf; absent/empty/
+ * 64-hex 4th element → sections; any other word marker (vocab concept refs)
+ * → neither.
+ */
+function publicationToContentResult(event: NostrEvent): PublicationResult | null {
+  const d = tag(event, 'd');
+  const title = tag(event, 'title');
+  if (!d || !title) return null;
+  const { naddr, url } = encodeNaddrAndUrl(event.kind, event.pubkey, d);
+  const result: PublicationResult = {
+    type: 'publication',
+    kind: event.kind as 30040 | 30041,
+    title,
+    naddr,
+    url,
+    eventAuthor: eventAuthor(event.pubkey),
+    createdAt: event.created_at,
+  };
+
+  if (event.kind === 30041) {
+    const ex = excerpt(event.content);
+    if (ex) result.excerpt = ex;
+    return result;
+  }
+
+  const summary = tag(event, 'summary');
+  if (summary) result.summary = summary;
+  const authors = tagValues(event, 'author');
+  if (authors.length) result.authors = authors;
+  const identifier = tag(event, 'i');
+  if (identifier) {
+    result.identifier = identifier;
+    if (identifier.startsWith('doi:')) result.doi = identifier.slice(4);
+  }
+  const publicationType = tag(event, 'type');
+  if (publicationType) result.publicationType = publicationType;
+  const additionalType = tag(event, 'additionalType');
+  if (additionalType) result.additionalType = additionalType;
+  const publishedOn = tag(event, 'published_on');
+  if (publishedOn) result.publishedOn = publishedOn;
+  const publishedBy = tag(event, 'published_by');
+  if (publishedBy) result.publishedBy = publishedBy;
+  const source = tag(event, 'source');
+  if (source && /^https?:\/\//.test(source)) result.sourcePage = source;
+  const keywords = tagValues(event, 't');
+  if (keywords.length) result.keywords = keywords;
+  const language = tag(event, 'inLanguage');
+  if (language) result.language = language;
+  const license = tag(event, 'license:id');
+  if (license) result.license = license;
+
+  const partOf: string[] = [];
+  const sections: string[] = [];
+  for (const t of event.tags) {
+    if (t[0] !== 'a' || !t[1]) continue;
+    const marker = t[3] ?? '';
+    if (marker === 'isPartOf' || marker === 'isOutputOf') partOf.push(t[1]);
+    else if (marker === '' || isHex64(marker)) sections.push(t[1]);
+    // other word markers (vocab concept refs) → neither
+  }
+  if (partOf.length) result.partOf = partOf;
+  if (sections.length) result.sections = sections;
   return result;
 }
 
@@ -176,8 +244,14 @@ const CONTENT_TRANSFORMS: Record<
   30818: (event) => wikiToContentResult(event),
   30143: (event) => transferkioskToContentResult(event, 'project', 30143),
   30144: (event) => transferkioskToContentResult(event, 'measure', 30144),
-  30145: (event) => transferkioskToContentResult(event, 'publication', 30145),
+  30040: (event) => publicationToContentResult(event),
+  30041: (event) => publicationToContentResult(event),
 };
+
+/** True when transformContentEvent can format this kind (get_resource dispatch). */
+export function hasContentTransform(kind: number): boolean {
+  return kind in CONTENT_TRANSFORMS;
+}
 
 export function transformContentEvent(
   event: NostrEvent,

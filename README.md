@@ -58,27 +58,30 @@ cp .env.example .env
 
 | Name | Used by | Default | Description |
 |------|---------|---------|-------------|
-| `AMB_RELAYS` | both transports | `wss://relay.edufeed.org` | Comma-separated AMB relay URLs queried by `search_resources`/`get_resource` and used as default publish targets. |
-| `AMB_AUTHOR_SETS` | both transports | _(empty)_ | Comma-separated `naddr` follow-set identifiers used to scope queries by author. |
-| `CALENDAR_RELAYS` | both transports | `wss://relay.edufeed.org` | Comma-separated NIP-52 calendar relay URLs. The AMB relay serves calendar events itself, so the default is the same relay; set this only for split deployments. |
-| `CALENDAR_AUTHOR_SETS` | both transports | _(empty)_ | Comma-separated `naddr` follow-set identifiers for calendar event queries. |
-| `SERVER_PRIVATE_KEY` | `src/index.ts` only | **required** | Nostr private key (`nsec` or hex) the server uses for its own ContextVM identity. The pubkey derived from this is what clients connect to via `cvmi use <pubkey>`. Not needed for stdio transport. |
-| `RELAYS` | `src/index.ts` only | `wss://relay.contextvm.org`, `wss://cvm.otherstuff.ai` | Comma-separated relay URLs for ContextVM transport announcements and request/response traffic. Not needed for stdio transport. |
-| `ANTHROPIC_API_KEY` | `extract_metadata` | _(unset)_ | Enables LLM-grounded SKOS field extraction. When unset the tool degrades to OpenGraph/JSON-LD only. |
-| `ANTHROPIC_MODEL` | `extract_metadata` | `claude-sonnet-4-6` | Override the default Anthropic model. |
+| `AMB_RELAYS` | all transports | `wss://relay.edufeed.org` | Comma-separated AMB relay URLs. Queried by every content tool (`search_content`, `search_resources`, `get_resource`, `browse_*`, `resolve_author`, `relay_stats`) and used as default publish targets for the signing tools. |
+| `AMB_AUTHOR_SETS` | all transports | _(empty)_ | Comma-separated `naddr` identifiers of NIP-51 follow sets (kind 30000). Loaded once at startup into the author directory served by `list_known_authors`; the returned pubkeys can then be passed to `search_*` tools as `authors`. |
+| `CALENDAR_RELAYS` | all transports | `wss://relay.edufeed.org` | Comma-separated NIP-52 calendar relay URLs for `search_calendar_events`. The AMB relay serves calendar events itself, so the default is the same relay; set this only for split deployments with a dedicated calendar relay. |
+| `CALENDAR_AUTHOR_SETS` | all transports | _(empty)_ | Same as `AMB_AUTHOR_SETS`, but for the calendar author directory served by `list_calendar_authors`. |
+| `EDUFEED_APP_BASE_URL` | all transports | _(unset)_ | Frontend base URL (no trailing slash, e.g. `https://app.edufeed.org`). When set, results from `search_content`, `search_resources`, `get_resource`, and `search_calendar_events` include a `url` field pointing at the edufeed-app viewer page (`<base>/<naddr>`) so LLM clients can render direct links. Unset means no `url` field. |
+| `SERVER_PRIVATE_KEY` | `src/index.ts` (+ discovery scripts) | **required** for Nostr transport | Nostr private key (`nsec` or hex) that is the server's own ContextVM identity. The derived pubkey is what clients connect to via `cvmi use <pubkey>`. Not read by the stdio or HTTP transports. |
+| `RELAYS` | `src/index.ts` (+ discovery scripts) | `wss://relay.contextvm.org`, `wss://cvm.otherstuff.ai` | Comma-separated relay URLs for ContextVM transport announcements and request/response traffic. Not read by the stdio or HTTP transports. |
+| `ANTHROPIC_API_KEY` | `extract_metadata` | _(unset)_ | Enables LLM-grounded SKOS field extraction. When unset the tool degrades gracefully to OpenGraph/JSON-LD-only output. |
+| `ANTHROPIC_MODEL` | `extract_metadata` | `claude-sonnet-4-6` | Override the Anthropic model used for extraction. |
 | `SKOS_SCHEMES` | `extract_metadata` | _(unset)_ | JSON map `{ "<form-field>": "<scheme-uri>" }` of default vocabularies used when the caller does not pass `skosSchemes` explicitly. |
-| `VOCAB_RELAYS` | `extract_metadata` | falls back to `AMB_RELAYS` | Relays used to resolve `naddr1…` SKOS scheme identifiers. |
-| `SCHEME_NADDR_*` | `extract_metadata` | _(unset)_ | Per-vocabulary naddr overrides (e.g. `SCHEME_NADDR_HCRT`, `SCHEME_NADDR_SCHULFAECHER`) mapping well-known scheme URIs to relay-hosted SKOS vocabularies. See `.env.example`. |
-| `OAUTH_*` | HTTP transport only | see below | OAuth resource-server settings — documented under [Option 4](#option-4-run-with-streamable-http-transport). |
-| `EDUFEED_APP_BASE_URL` | both transports | _(unset)_ | Frontend base URL (no trailing slash, e.g. `https://app.edufeed.org`). When set, `search_resources` and `get_resource` include a `url` field per resource pointing at the edufeed-app page so LLM clients can render direct links. |
+| `VOCAB_RELAYS` | `extract_metadata` | falls back to `AMB_RELAYS` | Relays used to resolve `naddr1…` SKOS scheme identifiers to relay-hosted vocabularies. |
+| `SCHEME_NADDR_*` | `extract_metadata` | _(unset)_ | Per-vocabulary naddr overrides (e.g. `SCHEME_NADDR_HCRT`, `SCHEME_NADDR_SCHULFAECHER`) mapping well-known scheme URIs to relay-hosted SKOS vocabularies. See `.env.example` for the full list. |
+| `HTTP_*`, `OAUTH_*` | `src/http.ts` only | see below | HTTP bind and OAuth resource-server settings — documented under [Option 4](#option-4-run-with-streamable-http-transport). |
+| `EMBED_TOKEN` | `docker-compose.yml` only | _(unset)_ | Token for the embedding service used by the bundled local test relay. Not read by the server itself. |
 
 ## Usage
 
 ### Option 1: Add to Claude Code (Recommended)
 
 ```bash
-claude mcp add amb-relay -e AMB_RELAYS=ws://localhost:3334 -- bun run /path/to/amb-mcp/src/stdio.ts
+claude mcp add amb-relay -- bun run /path/to/amb-mcp/src/stdio.ts
 ```
+
+This uses the default public relay (`wss://relay.edufeed.org`). To point at another relay — e.g. the local docker relay from [Development](#test-against-local-relay) — add `-e AMB_RELAYS=ws://localhost:3337`.
 
 ### Option 2: Run with cvmi (ContextVM)
 
@@ -222,6 +225,8 @@ Parameters:
 | `resourceTypeLabel` | string | Filter by resource type (e.g., "Video", "Kurs") |
 | `educationalLevelLabel` | string | Filter by educational level |
 | `language` | string | Language for labels (default: "de") |
+| `authors` | string[] | Filter by author pubkeys (hex) — e.g. from `resolve_author` or `list_known_authors` |
+| `since` / `until` | number | Unix timestamp bounds on resource creation time |
 | `limit` | number | Max results, 1-250 (default: 20) |
 
 ### get_resource

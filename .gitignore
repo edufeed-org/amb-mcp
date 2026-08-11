@@ -5,3 +5,4 @@ typesense-data/
 .worktrees/
 .claude/
 pnpm-lock.yaml
+.superpowers/

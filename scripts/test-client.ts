@@ -3,9 +3,9 @@
  * Quick test script for the AMB Relay Client
  */
 
-import { AMBRelayClient } from './src/relay/client.js';
-import { buildFilter } from './src/relay/filters.js';
-import { eventsToAMBResources, toSimplifiedResource } from './src/utils/transform.js';
+import { AMBRelayClient } from '../src/relay/client.js';
+import { buildFilter } from '../src/relay/filters.js';
+import { eventsToAMBResources, toSimplifiedResource } from '../src/utils/transform.js';
 
 const RELAY_URL = process.env.AMB_RELAY_URL || 'ws://localhost:3334';
 
@@ -17,10 +17,13 @@ async function main() {
   // Test 1: Get relay info
   console.log('=== Test 1: Relay Info ===');
   try {
-    const info = await client.getRelayInfo();
-    console.log(`Name: ${info.name}`);
-    console.log(`Description: ${info.description}`);
-    console.log(`Supported NIPs: ${info.supported_nips?.join(', ')}`);
+    const infoByRelay = await client.getRelayInfo();
+    for (const [relayUrl, info] of infoByRelay) {
+      console.log(`Relay: ${relayUrl}`);
+      console.log(`  Name: ${info.name}`);
+      console.log(`  Description: ${info.description}`);
+      console.log(`  Supported NIPs: ${info.supported_nips?.join(', ')}`);
+    }
   } catch (e) {
     console.error('Failed:', e);
   }

@@ -10,6 +10,9 @@ An MCP (Model Context Protocol) server for querying educational resources from A
 - Full-text search with NIP-50
 - Filter by publisher, creator, subject, resource type, educational level
 - Browse available subjects, resource types, and educational levels
+- Resolve author/organisation names to pubkeys (`resolve_author`) for author-scoped queries
+- NIP-52 calendar event search with temporal, geohash, and hashtag filters
+- SKOS controlled-vocabulary lookup and search (`skos_*`)
 - Get individual resources by identifier
 - Relay statistics and info
 
@@ -52,6 +55,9 @@ cp .env.example .env
 | `ANTHROPIC_API_KEY` | `extract_metadata` | _(unset)_ | Enables LLM-grounded SKOS field extraction. When unset the tool degrades to OpenGraph/JSON-LD only. |
 | `ANTHROPIC_MODEL` | `extract_metadata` | `claude-sonnet-4-6` | Override the default Anthropic model. |
 | `SKOS_SCHEMES` | `extract_metadata` | _(unset)_ | JSON map `{ "<form-field>": "<scheme-uri>" }` of default vocabularies used when the caller does not pass `skosSchemes` explicitly. |
+| `VOCAB_RELAYS` | `extract_metadata` | falls back to `AMB_RELAYS` | Relays used to resolve `naddr1…` SKOS scheme identifiers. |
+| `SCHEME_NADDR_*` | `extract_metadata` | _(unset)_ | Per-vocabulary naddr overrides (e.g. `SCHEME_NADDR_HCRT`, `SCHEME_NADDR_SCHULFAECHER`) mapping well-known scheme URIs to relay-hosted SKOS vocabularies. See `.env.example`. |
+| `OAUTH_*` | HTTP transport only | see below | OAuth resource-server settings — documented under [Option 4](#option-4-run-with-streamable-http-transport). |
 | `EDUFEED_APP_BASE_URL` | both transports | _(unset)_ | Frontend base URL (no trailing slash, e.g. `https://app.edufeed.org`). When set, `search_resources` and `get_resource` include a `url` field per resource pointing at the edufeed-app page so LLM clients can render direct links. |
 
 ## Usage
@@ -85,17 +91,26 @@ bun run src/index.ts
 For web-based MCP clients (Claude.ai connectors, MCP Inspector, custom browser apps):
 
 ```bash
-HTTP_BEARER_TOKEN=secret bun run src/http.ts   # dev
-node dist/http.js                              # production (after `npm run build`)
+bun run src/http.ts   # dev
+node dist/http.js     # production (after `npm run build`)
 ```
 
 | Variable | Default | Description |
 |---|---|---|
 | `HTTP_PORT` | `3000` | Port to bind. |
 | `HTTP_HOST` | `0.0.0.0` | Bind host. Use `127.0.0.1` to limit to a local proxy. |
-| `HTTP_BEARER_TOKEN` | _(unset)_ | If set, every `/mcp` request must carry `Authorization: Bearer <token>`. Unset means open. |
 | `HTTP_ALLOWED_HOSTS` | _(unset)_ | Comma-separated Host allow-list. Enables DNS-rebinding protection when set. |
 | `HTTP_ALLOWED_ORIGINS` | _(unset)_ | Comma-separated Origin allow-list. |
+| `OAUTH_ISSUER` | `https://auth.edufeed.org/realms/edufeed` | OIDC issuer whose tokens are accepted. |
+| `OAUTH_AUDIENCE` | `amb-mcp` | Required `aud` claim in access tokens. |
+| `OAUTH_JWKS_URI` | `<issuer>/protocol/openid-connect/certs` | JWKS endpoint for token signature verification. |
+| `OAUTH_RESOURCE_URL` | `https://mcp.amb.edufeed.org/mcp` | Public resource URL advertised in the OAuth protected-resource metadata document. |
+
+**Authentication model:** the HTTP transport is an OAuth 2.0 resource server.
+
+- A request **without** an `Authorization` header gets an anonymous **read-only** session (`mcp:read`): search, get, browse, resolve, SKOS lookups.
+- A request with a **valid JWT** (issued by `OAUTH_ISSUER` for audience `OAUTH_AUDIENCE`) is granted the token's scopes: `mcp:read` and/or `mcp:extract` (the budget-spending `extract_metadata` tool). An invalid token is rejected with 401.
+- **Write/signing tools are never exposed over HTTP** — they are only available on the stdio and Nostr transports. Insufficient scope means the tool is simply absent from `tools/list`.
 
 The server exposes:
 
@@ -107,20 +122,22 @@ The server exposes:
 Example handshake with `curl`:
 
 ```bash
-# 1. initialize, capture the Mcp-Session-Id response header
+# 1. initialize (anonymous = read-only session), capture the Mcp-Session-Id response header
 curl -i http://localhost:3000/mcp -X POST \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
-  -H "Authorization: Bearer $HTTP_BEARER_TOKEN" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
 
 # 2. reuse the session id for tools/list, tools/call, etc.
 curl http://localhost:3000/mcp -X POST \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
-  -H "Authorization: Bearer $HTTP_BEARER_TOKEN" \
   -H 'Mcp-Session-Id: <id-from-step-1>' \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+
+# To use extract_metadata, add an OAuth token to the *initialize* request:
+#   -H "Authorization: Bearer $ACCESS_TOKEN"
+# (scopes are fixed at session init; a token on later requests does not upgrade the session)
 ```
 
 Smoke-test with [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
@@ -140,6 +157,12 @@ https://mcp.amb.edufeed.org/mcp
 It speaks the same streamable-HTTP protocol as the local server. **Read tools are public** — a request with no `Authorization` header gets a read-only session (search/get/browse/resolve). The budget-spending `extract_metadata` tool requires a valid OAuth token carrying the `mcp:extract` scope; tokens are issued by the Keycloak realm out-of-band — ask the operator. The handshake is otherwise identical to the curl example above; just substitute the URL and drop the `Authorization` header for read-only use.
 
 ## Available Tools
+
+Tools are grouped into three profiles:
+
+- **Read** — search, get, browse, resolve, SKOS lookups, calendar. Available on all transports; served anonymously over HTTP.
+- **Extract** — `extract_metadata`. Over HTTP requires an OAuth token with the `mcp:extract` scope.
+- **Write** — signer, publish, relay management, and SKOS vocabulary builder tools. Only exposed on the stdio and Nostr transports, never over HTTP.
 
 ### search_content
 
@@ -214,6 +237,27 @@ Each returned resource includes the standard AMB fields plus:
 - `nostr.naddr` — NIP-19 addressable identifier (`kind=30142`, pubkey, d-tag). Useful for any Nostr client.
 - `url` — direct link to the edufeed-app page for this resource. **Only present when `EDUFEED_APP_BASE_URL` is configured.** LLM clients should cite this as a markdown link (`[name](url)`) when recommending the resource so users can open it.
 
+### resolve_author
+
+Resolve an organisation or person **name** to candidate pubkeys using the relay's
+kind-0 author-profile index (NIP-50 search). This is the entry point for
+name-driven questions ("recent articles by Jörg Lohrer"): resolve the name, pick
+the best candidate, then pass its pubkey to `search_content({ authors: [pubkey] })`
+or `search_calendar_events`. Returns up to `limit` candidates ranked by relevance.
+
+Parameters:
+| Name | Type | Description |
+|------|------|-------------|
+| `name` | string | Org or person name to resolve |
+| `limit` | number | Max candidates, 1-25 (default 10) |
+
+### list_known_authors
+
+List known educational-resource authors loaded from the configured follow sets
+(NIP-51 kind 30000, see `AMB_AUTHOR_SETS`). Returns names, pubkeys, and NIP-05
+identifiers. Distinct from `resolve_author`, which searches the relay-wide
+profile index rather than hand-curated sets.
+
 ### browse_subjects
 
 List available subjects/topics with resource counts.
@@ -229,6 +273,50 @@ List available educational levels (Primary, Secondary, Higher Education, etc.).
 ### relay_stats
 
 Get relay information including name, description, and supported NIPs.
+
+### list_relays
+
+List all AMB relays configured for the current session. The write profile
+additionally exposes `add_relay` / `remove_relay` to adjust the session's relay
+set at runtime (per-session over HTTP; process-wide on stdio).
+
+### relay_list_get
+
+Fetch a user's NIP-65 relay list (kind 10002). See
+[NIP-65 Outbox Model](#nip-65-outbox-model) below for the response shape.
+
+### SKOS vocabulary tools
+
+Read tools for controlled vocabularies hosted as Nostr events or referenced by URI:
+
+- `skos_list_vocabularies` — list vocabularies known to the server
+- `skos_get_vocabulary` / `skos_get_vocabulary_status` — fetch a scheme with its concepts / check availability
+- `skos_get_concept` — fetch a single concept with labels and relations
+- `skos_search` — search concepts across vocabularies by label
+
+The write profile adds a vocabulary **builder** suite (`skos_create_vocabulary`,
+`skos_add_concept`, `skos_update_concept`, `skos_remove_concept`,
+`skos_set_relationship`, `skos_add_mapping`, `skos_import_turtle`,
+`skos_export_turtle`, `skos_delete_vocabulary`) for authoring SKOS vocabularies
+and publishing them as Nostr events.
+
+### extract_metadata
+
+Fetch one or more public web pages (or PDFs) and produce an AMB/EKW form-prefill
+payload. Returns OpenGraph/JSON-LD fallback by default; with `ANTHROPIC_API_KEY`
+set, an LLM grounded in the configured SKOS vocabularies fills SKOS-typed fields
+with concept IDs and per-field evidence quotes. Also available as a library
+export: `import { extractMetadata } from 'amb-mcp/lib'`.
+
+Parameters:
+| Name | Type | Description |
+|------|------|-------------|
+| `url` | string | Public http(s) URL to extract (use `urls` for multiple sources) |
+| `urls` | string[] | Multiple source URLs merged into one extraction (e.g. several PDFs) |
+| `variant` | string | Form variant: `amb` (default), `ekw` (adds religious-education fields), `konfi` (adds Konfi-Arbeit fields) |
+| `skosSchemes` | object | Map of form field → SKOS scheme URI, overriding `SKOS_SCHEMES` |
+
+Fetching is SSRF-aware (private/loopback ranges are blocked).
 
 ### search_calendar_events
 
@@ -453,7 +541,7 @@ The server has three entry points; pick the one that matches your client:
 - Node ≥ 20 (or Bun ≥ 1.1) for runtime.
 - Outbound WebSocket access to the configured AMB and ContextVM relays.
 - Outbound HTTPS for the `extract_metadata` tool (target pages and, optionally, the Anthropic API).
-- A sibling checkout of [`amb-nostr-converter`](../amb-nostr-converter) at `../amb-nostr-converter`. `package.json` references it via `file:../amb-nostr-converter`, so `bun install` / `npm install` will fail without it. If you do not have a sibling layout, vendor it into the repo or replace the dep with a published version before deploying.
+- Network access to `git.edufeed.org` during install — the `amb-nostr-converter` dependency is fetched as a published tarball from the edufeed npm registry (see `package.json`).
 
 ### Build & run
 
@@ -491,61 +579,53 @@ On startup with Nostr transport, the server publishes a ContextVM announcement t
 ### Run tests
 
 ```bash
-bun test
+bun run test        # vitest, no network needed
 ```
 
 ### Test against local relay
 
-Start the AMB relay:
-```bash
-cd /path/to/amb-relay
-docker compose up -d
-```
+`docker-compose.yml` in this repo starts a local AMB relay (with Typesense) on
+`ws://localhost:3337` — it expects a sibling checkout of `amb-relay` at
+`../amb-relay` for the image build:
 
-Run the test client:
 ```bash
-AMB_RELAY_URL=ws://localhost:3334 bun run test-client.ts
+docker compose up -d
+AMB_RELAY_URL=ws://localhost:3337 bun run scripts/test-client.ts
 ```
 
 ## Scripts
 
-- `scripts/unpublish-server.ts` - Remove server from public ContextVM discovery
-- `scripts/delete-announcements.ts` - Attempt to delete announcement events
+- `scripts/ask.ts` — pose a natural-language question to `search_content` and print the structured result an LLM client would receive
+- `scripts/test-client.ts` — quick relay-client smoke test (relay info, queries, transforms)
+- `scripts/smoke-search-content.ts` / `scripts/smoke-extract-metadata.ts` — live smoke tests against the dev relay
+- `scripts/unpublish-server.ts` — remove server from public ContextVM discovery
+- `scripts/delete-announcements.ts` — attempt to delete announcement events
 
 ## Architecture
 
 ```
 src/
-├── index.ts          # Nostr transport entry point
+├── index.ts          # Nostr/ContextVM transport entry point
 ├── stdio.ts          # Stdio transport entry point (for cvmi/Claude Code)
-├── http.ts           # Streamable HTTP transport entry point
+├── http.ts           # Streamable HTTP transport entry point (OAuth resource server)
+├── session.ts        # Per-session MCP server factory (relay clients + tool profile)
+├── server-info.ts    # Server name/version constants
+├── authors.ts        # NIP-51 follow-set author directories
 ├── transport/
-│   └── http.ts       # Express app + StreamableHTTPServerTransport wiring
-├── relay/
-│   ├── client.ts     # AMB relay client (SimplePool wrapper)
-│   └── filters.ts    # NIP-50 search string builder
-├── signer/
-│   ├── manager.ts    # SignerManager for NIP-46 session management
-│   ├── publish.ts    # PublishService for relay publishing
-│   ├── relay-list.ts # NIP-65 relay list service (outbox model)
-│   ├── event-builder.ts # Event builders (metadata, AMB resources)
-│   └── index.ts      # Module exports
-├── tools/
-│   ├── search.ts     # search_resources tool
-│   ├── get.ts        # get_resource tool
-│   ├── browse.ts     # browse_* tools
-│   ├── stats.ts      # relay_stats tool
-│   ├── signer.ts     # signer_* tools (init, connect, status, disconnect)
-│   └── publish.ts    # sign_event, publish_event, create_and_publish_* tools
-├── resources/
-│   ├── schema.ts     # amb://schema resource
-│   ├── vocabularies.ts # amb://vocabularies/* resources
-│   └── relay-info.ts # amb://relay-info resource
-├── types/
-│   ├── amb.ts        # AMB TypeScript types
-│   └── qrcode-terminal.d.ts # Type declarations for qrcode-terminal
-└── utils/
-    └── transform.ts  # Nostr event to AMB resource transformer
+│   ├── http.ts       # Express app + StreamableHTTPServerTransport wiring
+│   ├── auth.ts       # JWT verification (JWKS)
+│   └── prm.ts        # OAuth protected-resource metadata document
+├── relay/            # AMB relay client + NIP-50 filter builders
+├── calendar/         # NIP-52 calendar filters + transforms
+├── content/          # Multi-kind content transforms + snippet handling (search_content)
+├── profiles/         # Kind-0 profile transforms (resolve_author)
+├── skos/             # SKOS vocabulary client, parser, cache, Nostr loader
+├── lib/              # extract_metadata library (fetch, PDF, LLM, vocab grounding)
+├── signer/           # NIP-46 signing, publishing, NIP-65 relay lists, event builders
+├── tools/            # One module per MCP tool (registered via tools/index.ts profiles)
+├── resources/        # amb:// MCP resources (schema, vocabularies, relay info)
+├── types/            # AMB TypeScript types
+└── utils/            # Event → AMB resource transforms, community helpers
 ```
 
 ## License

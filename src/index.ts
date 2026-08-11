@@ -23,7 +23,7 @@ import { SERVER_NAME, SERVER_VERSION, SERVER_INSTRUCTIONS } from './server-info.
 // Configuration from environment
 const AMB_RELAYS = process.env.AMB_RELAYS?.split(',') || ['wss://relay.edufeed.org'];
 const AMB_AUTHOR_SETS = process.env.AMB_AUTHOR_SETS?.split(',').filter(Boolean) || [];
-const CALENDAR_RELAYS = process.env.CALENDAR_RELAYS?.split(',').filter(Boolean) || ['wss://dev.calendar-relay.edufeed.org'];
+const CALENDAR_RELAYS = process.env.CALENDAR_RELAYS?.split(',').filter(Boolean) || ['wss://relay.edufeed.org'];
 const CALENDAR_AUTHOR_SETS = process.env.CALENDAR_AUTHOR_SETS?.split(',').filter(Boolean) || [];
 const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
 const RELAYS = process.env.RELAYS?.split(',') || [

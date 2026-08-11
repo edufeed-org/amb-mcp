@@ -2,6 +2,18 @@
 
 An MCP (Model Context Protocol) server for querying educational resources from AMB (Allgemeines Metadatenprofil für Bildungsressourcen) Nostr relays.
 
+## Repository
+
+The canonical repository lives on Nostr ([NIP-34](https://github.com/nostr-protocol/nips/blob/master/34.md)) — browse it on [gitworkshop.dev](https://gitworkshop.dev/laoc.xyz/amb-mcp), or clone with the [ngit](https://gitworkshop.dev/ngit) remote helper:
+
+```bash
+git clone nostr://laoc.xyz/relay.ngit.dev/amb-mcp
+```
+
+Mirrors: [git.edufeed.org/edufeed/amb-mcp](https://git.edufeed.org/edufeed/amb-mcp) · [github.com/edufeed-org/amb-mcp](https://github.com/edufeed-org/amb-mcp). Issues and PRs are welcome on any of the three — Nostr PRs arrive as `pr/*` branches.
+
+Releases are tagged (`v0.1.0`, …) and listed in [CHANGELOG.md](CHANGELOG.md).
+
 ## Features
 
 ### Query & Browse
@@ -48,7 +60,7 @@ cp .env.example .env
 |------|---------|---------|-------------|
 | `AMB_RELAYS` | both transports | `wss://relay.edufeed.org` | Comma-separated AMB relay URLs queried by `search_resources`/`get_resource` and used as default publish targets. |
 | `AMB_AUTHOR_SETS` | both transports | _(empty)_ | Comma-separated `naddr` follow-set identifiers used to scope queries by author. |
-| `CALENDAR_RELAYS` | both transports | `wss://dev.calendar-relay.edufeed.org` | Comma-separated NIP-52 calendar relay URLs. |
+| `CALENDAR_RELAYS` | both transports | `wss://relay.edufeed.org` | Comma-separated NIP-52 calendar relay URLs. The AMB relay serves calendar events itself, so the default is the same relay; set this only for split deployments. |
 | `CALENDAR_AUTHOR_SETS` | both transports | _(empty)_ | Comma-separated `naddr` follow-set identifiers for calendar event queries. |
 | `SERVER_PRIVATE_KEY` | `src/index.ts` only | **required** | Nostr private key (`nsec` or hex) the server uses for its own ContextVM identity. The pubkey derived from this is what clients connect to via `cvmi use <pubkey>`. Not needed for stdio transport. |
 | `RELAYS` | `src/index.ts` only | `wss://relay.contextvm.org`, `wss://cvm.otherstuff.ai` | Comma-separated relay URLs for ContextVM transport announcements and request/response traffic. Not needed for stdio transport. |

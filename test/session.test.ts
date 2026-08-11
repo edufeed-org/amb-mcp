@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { buildSessionServer } from '../src/session.js';
 
 const DEFAULTS = ['wss://relay.edufeed.org'];
-const CAL_DEFAULTS = ['wss://dev.calendar-relay.edufeed.org'];
+const CAL_DEFAULTS = ['wss://relay.edufeed.org'];
 
 async function listToolNames(profile?: { read?: boolean; extract?: boolean; write?: boolean }) {
   const s = buildSessionServer(DEFAULTS, CAL_DEFAULTS, profile);

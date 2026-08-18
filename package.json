@@ -1,6 +1,6 @@
 {
   "name": "amb-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "ContextVM MCP server for querying AMB educational metadata from Nostr relays",
   "license": "Unlicense",
   "type": "module",

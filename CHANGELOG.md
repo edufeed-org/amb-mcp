@@ -4,7 +4,7 @@ All notable changes to amb-mcp are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/) (0.x — the API may still change between minors).
 
-## [Unreleased]
+## [0.2.0] - 2026-08-18
 
 ### Added
 

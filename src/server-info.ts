@@ -1,5 +1,5 @@
 export const SERVER_NAME = 'amb-relay';
-export const SERVER_VERSION = '0.1.0';
+export const SERVER_VERSION = '0.2.0';
 
 export const SERVER_INSTRUCTIONS = `This server is the gateway to the AMB educational-metadata relays — a Nostr-based store of learning resources, long-form articles, wiki pages, scientific publications, and calendar events. Use these tools to answer questions about educational content, its authors, and upcoming events; they abstract the Nostr layer, so query them rather than reading the relays directly. Identifiers like naddr, npub, and pubkey are NIP-19/Nostr values these tools return — pass them back as-is rather than constructing them yourself.
 

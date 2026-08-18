@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { AMBRelayClient } from '../relay/client.js';
+import { UnknownRelayError, type AMBRelayClient } from '../relay/client.js';
+import { unknownRelayPayload } from './relaySelection.js';
 import type { NostrEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
 import { eventToAMBResource, toSimplifiedResource } from '../utils/transform.js';
@@ -25,8 +26,13 @@ export function naddrToLookup(
 
 /** The minimal client surface runGetResource needs — mirrors runContentSearch's Pick<...> pattern. */
 interface GetClient {
-  getByDTag(dTag: string, author?: string, kinds?: number[]): Promise<NostrEvent | null>;
-  getById(eventId: string, kinds?: number[]): Promise<NostrEvent | null>;
+  getByDTag(
+    dTag: string,
+    author?: string,
+    kinds?: number[],
+    relays?: string[]
+  ): Promise<NostrEvent | null>;
+  getById(eventId: string, kinds?: number[], relays?: string[]): Promise<NostrEvent | null>;
 }
 
 /** The pre-existing 30142 formatting, byte-identical in behavior. */
@@ -45,7 +51,14 @@ function formatAMB(event: NostrEvent | null, lang: string): Record<string, unkno
 
 export async function runGetResource(
   client: GetClient,
-  params: { identifier?: string; author?: string; eventId?: string; naddr?: string; language?: string }
+  params: {
+    identifier?: string;
+    author?: string;
+    eventId?: string;
+    naddr?: string;
+    language?: string;
+    relays?: string[];
+  }
 ): Promise<Record<string, unknown>> {
   if (!params.identifier && !params.eventId && !params.naddr) {
     return { error: 'Either identifier, eventId, or naddr must be provided', resource: null };
@@ -54,7 +67,7 @@ export async function runGetResource(
 
   // Priority order: eventId > naddr > identifier (restores pre-refactor behavior)
   if (params.eventId) {
-    const event = await client.getById(params.eventId);
+    const event = await client.getById(params.eventId, undefined, params.relays);
     return formatAMB(event, lang);
   }
 
@@ -68,18 +81,33 @@ export async function runGetResource(
           : '';
         return { error: `naddr kind ${lookup.kind} cannot be resolved by get_resource on this server.${hint}`, resource: null };
       }
-      const event = await client.getByDTag(lookup.identifier, lookup.author, [lookup.kind]);
+      const event = await client.getByDTag(
+        lookup.identifier,
+        lookup.author,
+        [lookup.kind],
+        params.relays
+      );
       if (!event) return { resource: null, message: 'Resource not found' };
       const result = transformContentEvent(event, lang);
       if (!result) return { resource: null, message: 'Failed to parse resource' };
       return { resource: result };
     }
     // 30142 falls through to the existing full-AMB path below.
-    const event = await client.getByDTag(lookup.identifier, lookup.author);
+    const event = await client.getByDTag(
+      lookup.identifier,
+      lookup.author,
+      undefined,
+      params.relays
+    );
     return formatAMB(event, lang);
   }
 
-  const event = await client.getByDTag(params.identifier!, params.author);
+  const event = await client.getByDTag(
+    params.identifier!,
+    params.author,
+    undefined,
+    params.relays
+  );
   return formatAMB(event, lang);
 }
 
@@ -124,10 +152,27 @@ export function registerGetTool(server: McpServer, client: AMBRelayClient): void
           .optional()
           .default('de')
           .describe('Preferred language for labels (default: "de")'),
+        relays: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Restrict the lookup to specific relays — pass the relays a search found the ' +
+              'result on. Only relays returned by list_relays (default or extra) are ' +
+              'accepted. Default: the default relay set.'
+          ),
       },
     },
     async (params) => {
-      const payload = await runGetResource(client, params);
+      let relays: string[];
+      try {
+        relays = client.resolveRelays(params.relays);
+      } catch (err) {
+        if (err instanceof UnknownRelayError) {
+          return { content: [{ type: 'text', text: JSON.stringify(unknownRelayPayload(err)) }] };
+        }
+        throw err;
+      }
+      const payload = await runGetResource(client, { ...params, relays });
       return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
     }
   );

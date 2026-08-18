@@ -14,6 +14,15 @@ async function listToolNames(profile?: { read?: boolean; extract?: boolean; writ
 }
 
 describe('buildSessionServer per-session relay isolation', () => {
+  it('seeds the AMB client with selectable extra relays', () => {
+    const s = buildSessionServer(DEFAULTS, CAL_DEFAULTS, undefined, {
+      ambExtraRelays: ['wss://oersi.example'],
+    });
+    expect(s.ambClient.getRelays()).toEqual(DEFAULTS);
+    expect(s.ambClient.getExtraRelays()).toEqual(['wss://oersi.example']);
+    s.dispose();
+  });
+
   it('gives each session independent relay clients', () => {
     const a = buildSessionServer(DEFAULTS, CAL_DEFAULTS);
     const b = buildSessionServer(DEFAULTS, CAL_DEFAULTS);

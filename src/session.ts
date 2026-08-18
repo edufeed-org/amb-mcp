@@ -23,12 +23,15 @@ export function buildSessionServer(
   ambRelays: string | string[],
   calendarRelays: string | string[],
   profile: import('./tools/index.js').ToolProfile = { read: true, extract: true, write: true },
+  options?: { ambExtraRelays?: string[] },
 ): SessionServer {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     { instructions: SERVER_INSTRUCTIONS },
   );
-  const ambClient = new AMBRelayClient(ambRelays);
+  const ambClient = new AMBRelayClient(ambRelays, {
+    extraRelays: options?.ambExtraRelays,
+  });
   const calendarClient = new AMBRelayClient(calendarRelays);
   registerTools(server, ambClient, calendarClient, profile);
   registerResources(server, ambClient);

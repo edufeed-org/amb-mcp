@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { AMBRelayClient } from '../relay/client.js';
+import { UnknownRelayError, type AMBRelayClient } from '../relay/client.js';
+import { unknownRelayPayload } from './relaySelection.js';
 import { buildContentFilter, type ContentSearchParams } from '../relay/filters.js';
 import { transformContentEvent } from '../content/transform.js';
 import { parseSnippets, attachSnippets, SNIPPET_KIND } from '../content/snippet.js';
@@ -13,11 +14,11 @@ import type { SimplifiedContentResult } from '../content/types.js';
  */
 export async function runContentSearch(
   client: Pick<AMBRelayClient, 'queryEvents'>,
-  params: ContentSearchParams & { language?: string }
+  params: ContentSearchParams & { language?: string; relays?: string[] }
 ): Promise<{ total: number; results: SimplifiedContentResult[] }> {
   const language = params.language ?? 'de';
   const filter = buildContentFilter(params);
-  const events = await client.queryEvents(filter);
+  const events = await client.queryEvents(filter, params.relays);
 
   const snippetEvents = events.filter((e) => e.kind === SNIPPET_KIND);
 
@@ -95,9 +96,25 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
               'Resolve a community name to its pubkey with resolve_author. Combine with query to ' +
               'scope a topic to a community (e.g. "math resources shared with X").',
           ),
+        relays: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Restrict the search to specific relays. Only relays returned by list_relays ' +
+              '(default or extra) are accepted. Default: the default relay set.'
+          ),
       },
     },
     async (params) => {
+      let relaysSearched: string[];
+      try {
+        relaysSearched = client.resolveRelays(params.relays);
+      } catch (err) {
+        if (err instanceof UnknownRelayError) {
+          return { content: [{ type: 'text', text: JSON.stringify(unknownRelayPayload(err)) }] };
+        }
+        throw err;
+      }
       const out = await runContentSearch(client, {
         query: params.query,
         types: params.types,
@@ -107,8 +124,11 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
         authors: params.authors,
         limit: params.limit,
         community: params.community,
+        relays: relaysSearched,
       });
-      return { content: [{ type: 'text', text: JSON.stringify(out) }] };
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ relaysSearched, ...out }) }],
+      };
     }
   );
 }

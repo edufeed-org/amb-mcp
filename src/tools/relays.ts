@@ -15,11 +15,15 @@ export function registerListRelaysTool(
     'list_relays',
     {
       title: 'List Relays',
-      description: 'List all configured AMB relays.',
+      description:
+        'List the configured AMB relays. defaultRelays are searched on every query; ' +
+        'extraRelays hold different corpora (e.g. the OERSI aggregation) and are only ' +
+        'searched when a search/get tool call passes them in its relays parameter.',
       inputSchema: {},
     },
     async () => {
-      const relays = client.getRelays();
+      const defaultRelays = client.getRelays();
+      const extraRelays = client.getExtraRelays();
 
       return {
         content: [
@@ -27,8 +31,9 @@ export function registerListRelaysTool(
             type: 'text',
             text: JSON.stringify(
               {
-                relays,
-                count: relays.length,
+                defaultRelays,
+                extraRelays,
+                count: defaultRelays.length + extraRelays.length,
               },
               null,
               2

@@ -61,6 +61,18 @@ describe('runContentSearch', () => {
     expect(out).toEqual({ total: 0, results: [] });
   });
 
+  it('passes the per-call relay selection through to queryEvents', async () => {
+    let seenRelays: string[] | undefined;
+    const client = {
+      queryEvents: async (_f: unknown, relays?: string[]) => {
+        seenRelays = relays;
+        return [] as NostrEvent[];
+      },
+    };
+    await runContentSearch(client, { query: 'x', relays: ['wss://oersi.example'] });
+    expect(seenRelays).toEqual(['wss://oersi.example']);
+  });
+
   it('surfaces publication indices and sections with their snippets', async () => {
     const pub = evt(30040, 'pub1', [
       ['d', 'tk-p1-pub2'],

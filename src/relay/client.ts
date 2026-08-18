@@ -82,19 +82,29 @@ export class AMBRelayClient {
     this.relayUrls = new Set(
       Array.isArray(relayUrls) ? relayUrls : [relayUrls]
     );
-    const defaults = new Set(
+    const taken = new Set(
       [...this.relayUrls].map((u) => normalizeForMatch(u) ?? u)
     );
-    this.extraRelayUrls = new Set(
-      (options?.extraRelays ?? []).filter(
-        (u) => !defaults.has(normalizeForMatch(u) ?? u)
-      )
-    );
+    this.extraRelayUrls = new Set();
+    for (const url of options?.extraRelays ?? []) {
+      const norm = normalizeForMatch(url) ?? url;
+      if (taken.has(norm)) continue;
+      taken.add(norm);
+      this.extraRelayUrls.add(url);
+    }
   }
 
   // ============ Runtime relay management ============
 
   addRelay(url: string): void {
+    // A relay promoted into the default set must leave the extra set, or
+    // list_relays would report it in both groups.
+    const norm = normalizeForMatch(url) ?? url;
+    for (const extra of [...this.extraRelayUrls]) {
+      if ((normalizeForMatch(extra) ?? extra) === norm) {
+        this.extraRelayUrls.delete(extra);
+      }
+    }
     this.relayUrls.add(url);
   }
 

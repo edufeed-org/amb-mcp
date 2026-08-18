@@ -84,6 +84,23 @@ describe('relay selection', () => {
   });
 });
 
+describe('runtime relay mutation vs extras', () => {
+  it('addRelay of an extra relay moves it to the default set (no dual membership)', () => {
+    const client = makeClient();
+    client.addRelay(`${EXTRA}/`);
+    expect(client.getRelays()).toEqual([DEFAULT, `${EXTRA}/`]);
+    expect(client.getExtraRelays()).toEqual([]);
+    expect(client.getSelectableRelays()).toEqual([DEFAULT, `${EXTRA}/`]);
+  });
+
+  it('dedupes normalization-duplicate extras at construction', () => {
+    const client = new AMBRelayClient([DEFAULT], {
+      extraRelays: [EXTRA, `${EXTRA}/`],
+    });
+    expect(client.getExtraRelays()).toEqual([EXTRA]);
+  });
+});
+
 describe('query routing with a relays override', () => {
   it('query() hits the default relays when no override is given', async () => {
     const client = makeClient();

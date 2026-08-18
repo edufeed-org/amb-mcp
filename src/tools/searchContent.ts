@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { UnknownRelayError, type AMBRelayClient } from '../relay/client.js';
-import { unknownRelayPayload } from './relaySelection.js';
+import type { AMBRelayClient } from '../relay/client.js';
+import { resolveRelaysOrError } from './relaySelection.js';
 import { buildContentFilter, type ContentSearchParams } from '../relay/filters.js';
 import { transformContentEvent } from '../content/transform.js';
 import { parseSnippets, attachSnippets, SNIPPET_KIND } from '../content/snippet.js';
@@ -106,15 +106,11 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
       },
     },
     async (params) => {
-      let relaysSearched: string[];
-      try {
-        relaysSearched = client.resolveRelays(params.relays);
-      } catch (err) {
-        if (err instanceof UnknownRelayError) {
-          return { content: [{ type: 'text', text: JSON.stringify(unknownRelayPayload(err)) }] };
-        }
-        throw err;
+      const selection = resolveRelaysOrError(client, params.relays);
+      if ('errorPayload' in selection) {
+        return { content: [{ type: 'text', text: JSON.stringify(selection.errorPayload) }] };
       }
+      const relaysSearched = selection.relays;
       const out = await runContentSearch(client, {
         query: params.query,
         types: params.types,

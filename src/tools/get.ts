@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { UnknownRelayError, type AMBRelayClient } from '../relay/client.js';
-import { unknownRelayPayload } from './relaySelection.js';
+import type { AMBRelayClient } from '../relay/client.js';
+import { resolveRelaysOrError } from './relaySelection.js';
 import type { NostrEvent } from 'nostr-tools';
 import { nip19 } from 'nostr-tools';
 import { eventToAMBResource, toSimplifiedResource } from '../utils/transform.js';
@@ -163,16 +163,11 @@ export function registerGetTool(server: McpServer, client: AMBRelayClient): void
       },
     },
     async (params) => {
-      let relays: string[];
-      try {
-        relays = client.resolveRelays(params.relays);
-      } catch (err) {
-        if (err instanceof UnknownRelayError) {
-          return { content: [{ type: 'text', text: JSON.stringify(unknownRelayPayload(err)) }] };
-        }
-        throw err;
+      const selection = resolveRelaysOrError(client, params.relays);
+      if ('errorPayload' in selection) {
+        return { content: [{ type: 'text', text: JSON.stringify(selection.errorPayload) }] };
       }
-      const payload = await runGetResource(client, { ...params, relays });
+      const payload = await runGetResource(client, { ...params, relays: selection.relays });
       return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
     }
   );

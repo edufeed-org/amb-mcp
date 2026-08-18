@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { UnknownRelayError } from '../../src/relay/client.js';
-import { unknownRelayPayload } from '../../src/tools/relaySelection.js';
+import { AMBRelayClient, UnknownRelayError } from '../../src/relay/client.js';
+import {
+  resolveRelaysOrError,
+  unknownRelayPayload,
+} from '../../src/tools/relaySelection.js';
 
 describe('unknownRelayPayload', () => {
   it('turns an UnknownRelayError into an actionable tool error payload', () => {
@@ -14,6 +17,34 @@ describe('unknownRelayPayload', () => {
       selectableRelays: ['wss://amb-relay.example', 'wss://oersi.example'],
       message:
         'The relays parameter only accepts relays from list_relays (default or extra).',
+    });
+  });
+});
+
+describe('resolveRelaysOrError', () => {
+  const client = new AMBRelayClient(['wss://amb-relay.example'], {
+    extraRelays: ['wss://oersi.example'],
+  });
+
+  it('returns the resolved relays for a valid selection', () => {
+    expect(resolveRelaysOrError(client, ['wss://oersi.example'])).toEqual({
+      relays: ['wss://oersi.example'],
+    });
+    expect(resolveRelaysOrError(client, undefined)).toEqual({
+      relays: ['wss://amb-relay.example'],
+    });
+  });
+
+  it('returns the error payload for an unknown relay', () => {
+    const out = resolveRelaysOrError(client, ['wss://evil.example']);
+    expect(out).toEqual({
+      errorPayload: {
+        error: 'Unknown relay(s) requested',
+        unknownRelays: ['wss://evil.example'],
+        selectableRelays: ['wss://amb-relay.example', 'wss://oersi.example'],
+        message:
+          'The relays parameter only accepts relays from list_relays (default or extra).',
+      },
     });
   });
 });

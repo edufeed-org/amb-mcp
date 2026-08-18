@@ -1,4 +1,4 @@
-import type { UnknownRelayError } from '../relay/client.js';
+import { UnknownRelayError, type AMBRelayClient } from '../relay/client.js';
 
 /**
  * Shared tool-error payload for a per-call `relays` selection that named a
@@ -12,4 +12,22 @@ export function unknownRelayPayload(err: UnknownRelayError): Record<string, unkn
     message:
       'The relays parameter only accepts relays from list_relays (default or extra).',
   };
+}
+
+/**
+ * Resolve a tool call's `relays` parameter: either the validated relay list
+ * to query, or the ready-to-serialize error payload for an unknown relay.
+ */
+export function resolveRelaysOrError(
+  client: Pick<AMBRelayClient, 'resolveRelays'>,
+  requested?: string[]
+): { relays: string[] } | { errorPayload: Record<string, unknown> } {
+  try {
+    return { relays: client.resolveRelays(requested) };
+  } catch (err) {
+    if (err instanceof UnknownRelayError) {
+      return { errorPayload: unknownRelayPayload(err) };
+    }
+    throw err;
+  }
 }

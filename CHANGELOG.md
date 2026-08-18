@@ -16,7 +16,10 @@ All notable changes to amb-mcp are documented here. The format follows
 - **`AMB_EXTRA_RELAYS`** environment variable: relays that are selectable per
   call but not part of the default search set (e.g. the OERSI aggregation
   relay, `wss://oersi.edufeed.org`).
-- **`list_relays`** now returns `defaultRelays` and `extraRelays` separately.
+### Changed
+
+- **Breaking:** `list_relays` now returns `defaultRelays` and `extraRelays`
+  instead of a single `relays` array.
 
 ## [0.1.0] - 2026-08-11
 

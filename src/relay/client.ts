@@ -362,13 +362,13 @@ export class AMBRelayClient {
   // ============ Relay info ============
 
   /**
-   * Fetch NIP-11 relay information from all relays
+   * Fetch NIP-11 relay information from all selectable relays (default ∪ extra)
    */
   async getRelayInfo(): Promise<Map<string, RelayInfo>> {
     const results = new Map<string, RelayInfo>();
 
     await Promise.allSettled(
-      this.getRelays().map(async (url) => {
+      this.getSelectableRelays().map(async (url) => {
         const httpUrl = url
           .replace('wss://', 'https://')
           .replace('ws://', 'http://');

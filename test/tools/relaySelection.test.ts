@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { AMBRelayClient, UnknownRelayError } from '../../src/relay/client.js';
 import {
+  relaysNotSearched,
   resolveRelaysOrError,
   unknownRelayPayload,
 } from '../../src/tools/relaySelection.js';
@@ -33,6 +34,18 @@ describe('resolveRelaysOrError', () => {
     expect(resolveRelaysOrError(client, undefined)).toEqual({
       relays: ['wss://amb-relay.example'],
     });
+  });
+
+  it('relaysNotSearched lists the selectable relays a search skipped', () => {
+    expect(relaysNotSearched(client, ['wss://amb-relay.example'])).toEqual([
+      'wss://oersi.example',
+    ]);
+    expect(relaysNotSearched(client, ['wss://oersi.example'])).toEqual([
+      'wss://amb-relay.example',
+    ]);
+    expect(
+      relaysNotSearched(client, ['wss://amb-relay.example', 'wss://oersi.example'])
+    ).toEqual([]);
   });
 
   it('returns the error payload for an unknown relay', () => {

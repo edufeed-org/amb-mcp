@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AMBRelayClient } from '../relay/client.js';
-import { resolveRelaysOrError } from './relaySelection.js';
+import { relaysNotSearched, resolveRelaysOrError } from './relaySelection.js';
 import { buildFilter, type SearchParams } from '../relay/filters.js';
 import { eventsToAMBResources, toSimplifiedResource } from '../utils/transform.js';
 
@@ -100,6 +100,8 @@ export function registerSearchTool(server: McpServer, client: AMBRelayClient): v
         ? await client.search(search, filter, relaysSearched)
         : await client.query(filter, relaysSearched);
 
+      const notSearched = relaysNotSearched(client, relaysSearched);
+
       // Transform to AMB resources
       const resources = eventsToAMBResources(events);
       const lang = params.language || 'de';
@@ -111,6 +113,7 @@ export function registerSearchTool(server: McpServer, client: AMBRelayClient): v
             type: 'text',
             text: JSON.stringify({
               relaysSearched,
+              ...(notSearched.length > 0 ? { relaysNotSearched: notSearched } : {}),
               total: simplified.length,
               resources: simplified,
             }),

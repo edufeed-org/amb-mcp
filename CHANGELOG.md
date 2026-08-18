@@ -4,6 +4,20 @@ All notable changes to amb-mcp are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/) (0.x — the API may still change between minors).
 
+## [0.2.1] - 2026-08-18
+
+Discoverability follow-up to 0.2.0: LLM clients assumed "configured ⇒
+searched" and misread the extra relay as unreachable.
+
+### Changed
+
+- `relay_stats` now covers all selectable relays (default and extra), each
+  marked with a `role` field, so per-call-only relays are visibly alive.
+- `list_relays` includes a `note` explaining that `extraRelays` are only
+  queried via the `relays` parameter.
+- Search responses list the selectable relays a search skipped as
+  `relaysNotSearched`, next to `relaysSearched`.
+
 ## [0.2.0] - 2026-08-18
 
 ### Added

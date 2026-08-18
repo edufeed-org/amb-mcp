@@ -5,6 +5,35 @@ import { getRelayListService } from '../signer/index.js';
 import { getSignerManager } from './signer.js';
 
 /**
+ * list_relays payload: relay groups plus, when extras exist, an explicit
+ * usage note — LLM clients otherwise assume "configured ⇒ searched".
+ */
+export function runListRelays(
+  client: Pick<AMBRelayClient, 'getRelays' | 'getExtraRelays'>
+): {
+  defaultRelays: string[];
+  extraRelays: string[];
+  count: number;
+  note?: string;
+} {
+  const defaultRelays = client.getRelays();
+  const extraRelays = client.getExtraRelays();
+  return {
+    defaultRelays,
+    extraRelays,
+    count: defaultRelays.length + extraRelays.length,
+    ...(extraRelays.length > 0
+      ? {
+          note:
+            'extraRelays are NOT searched by default — they hold different corpora. ' +
+            'To query one, pass it in the relays parameter of search_content, ' +
+            'search_resources, or get_resource.',
+        }
+      : {}),
+  };
+}
+
+/**
  * Register the list_relays tool
  */
 export function registerListRelaysTool(
@@ -22,22 +51,11 @@ export function registerListRelaysTool(
       inputSchema: {},
     },
     async () => {
-      const defaultRelays = client.getRelays();
-      const extraRelays = client.getExtraRelays();
-
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify(
-              {
-                defaultRelays,
-                extraRelays,
-                count: defaultRelays.length + extraRelays.length,
-              },
-              null,
-              2
-            ),
+            text: JSON.stringify(runListRelays(client), null, 2),
           },
         ],
       };

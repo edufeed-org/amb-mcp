@@ -101,6 +101,27 @@ describe('runtime relay mutation vs extras', () => {
   });
 });
 
+describe('getRelayInfo coverage', () => {
+  it('fetches NIP-11 info for default AND extra relays', async () => {
+    const client = makeClient();
+    const fetched: string[] = [];
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: unknown) => {
+      fetched.push(String(url));
+      return { ok: false, status: 404 } as Response;
+    }) as typeof fetch;
+    try {
+      await client.getRelayInfo();
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+    expect(fetched.sort()).toEqual([
+      'https://amb-relay.example',
+      'https://oersi.example',
+    ]);
+  });
+});
+
 describe('query routing with a relays override', () => {
   it('query() hits the default relays when no override is given', async () => {
     const client = makeClient();

@@ -15,6 +15,18 @@ export function unknownRelayPayload(err: UnknownRelayError): Record<string, unkn
 }
 
 /**
+ * Selectable relays a search did NOT cover — surfaced next to relaysSearched
+ * so callers discover, at the decision point, that more corpus is one
+ * `relays` parameter away.
+ */
+export function relaysNotSearched(
+  client: Pick<AMBRelayClient, 'getSelectableRelays'>,
+  searched: string[]
+): string[] {
+  return client.getSelectableRelays().filter((url) => !searched.includes(url));
+}
+
+/**
  * Resolve a tool call's `relays` parameter: either the validated relay list
  * to query, or the ready-to-serialize error payload for an unknown relay.
  */

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AMBRelayClient } from '../relay/client.js';
-import { resolveRelaysOrError } from './relaySelection.js';
+import { relaysNotSearched, resolveRelaysOrError } from './relaySelection.js';
 import { buildContentFilter, type ContentSearchParams } from '../relay/filters.js';
 import { transformContentEvent } from '../content/transform.js';
 import { parseSnippets, attachSnippets, SNIPPET_KIND } from '../content/snippet.js';
@@ -122,8 +122,18 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
         community: params.community,
         relays: relaysSearched,
       });
+      const notSearched = relaysNotSearched(client, relaysSearched);
       return {
-        content: [{ type: 'text', text: JSON.stringify({ relaysSearched, ...out }) }],
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              relaysSearched,
+              ...(notSearched.length > 0 ? { relaysNotSearched: notSearched } : {}),
+              ...out,
+            }),
+          },
+        ],
       };
     }
   );

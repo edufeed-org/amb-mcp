@@ -9,4 +9,6 @@ Two flows cover most questions:
 
 Authorship has two distinct layers — never conflate them: eventAuthor is the Nostr signer/uploader (often an aggregator), while creator/publisher (on resources) are who actually made and published the material. "Who published this?" is answered by publisher, never by eventAuthor.
 
+Searches run against the default relay set. list_relays may advertise extraRelays — additional relays holding different corpora (e.g. a broader aggregation) that are only queried when you pass them via the relays parameter of search_content, search_resources, or get_resource. When a search on the defaults comes up short, or the user asks for a specific relay's holdings, check list_relays and re-search with relays set; fetch follow-up details with the same relays value the search used.
+
 The server also browses controlled vocabularies (browse_*, skos_* tools) and, for authenticated clients, signs and publishes new metadata (signer_*, create_and_publish_*).`;

@@ -4,6 +4,23 @@ All notable changes to amb-mcp are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/) (0.x — the API may still change between minors).
 
+## [Unreleased]
+
+### Added
+
+- **Per-call relay selection:** `search_content`, `search_resources`, and
+  `get_resource` accept an optional `relays` parameter naming relays from the
+  selectable set (default ∪ extra); unknown relays are rejected with the list
+  of valid ones. Search responses report the queried relays as
+  `relaysSearched`.
+- **`AMB_EXTRA_RELAYS`** environment variable: relays that are selectable per
+  call but not part of the default search set (e.g. the OERSI aggregation
+  relay, `wss://oersi.edufeed.org`).
+### Changed
+
+- **Breaking:** `list_relays` now returns `defaultRelays` and `extraRelays`
+  instead of a single `relays` array.
+
 ## [0.1.0] - 2026-08-11
 
 First public release.

@@ -75,6 +75,31 @@ describe('runGetResource kind dispatch', () => {
     expect(client.calls.length).toBe(0);
   });
 
+  it('threads the per-call relay selection to getByDTag and getById', async () => {
+    const seen: Array<string[] | undefined> = [];
+    const client = {
+      getById: async (_id: string, _kinds?: number[], relays?: string[]) => {
+        seen.push(relays);
+        return null;
+      },
+      getByDTag: async (
+        _d: string,
+        _author?: string,
+        _kinds?: number[],
+        relays?: string[]
+      ) => {
+        seen.push(relays);
+        return null;
+      },
+    };
+    const relays = ['wss://oersi.example'];
+    await runGetResource(client, { eventId: 'e'.repeat(64), relays });
+    const naddr = nip19.naddrEncode({ kind: 30142, pubkey: author, identifier: 'x', relays: [] });
+    await runGetResource(client, { naddr, relays });
+    await runGetResource(client, { identifier: 'x', relays });
+    expect(seen).toEqual([relays, relays, relays]);
+  });
+
   it('prefers eventId over naddr when both are supplied (pre-refactor behavior)', async () => {
     const event = {
       id: 'byid', pubkey: author, created_at: 1700000000, kind: 30142, sig: 's', content: '{}',

@@ -15,11 +15,15 @@ export function registerListRelaysTool(
     'list_relays',
     {
       title: 'List Relays',
-      description: 'List all configured AMB relays.',
+      description:
+        'List the configured AMB relays. defaultRelays are searched on every query; ' +
+        'extraRelays hold different corpora (e.g. the OERSI aggregation) and are only ' +
+        'searched when a search/get tool call passes them in its relays parameter.',
       inputSchema: {},
     },
     async () => {
-      const relays = client.getRelays();
+      const defaultRelays = client.getRelays();
+      const extraRelays = client.getExtraRelays();
 
       return {
         content: [
@@ -27,8 +31,9 @@ export function registerListRelaysTool(
             type: 'text',
             text: JSON.stringify(
               {
-                relays,
-                count: relays.length,
+                defaultRelays,
+                extraRelays,
+                count: defaultRelays.length + extraRelays.length,
               },
               null,
               2
@@ -52,7 +57,9 @@ export function registerAddRelayTool(
     {
       title: 'Add Relay',
       description:
-        'Add a new AMB relay to query. The relay will be used for subsequent queries.',
+        'Add a new AMB relay to query. The relay will be used for subsequent queries. ' +
+        'Distinct from the env-configured extra relays, which are selectable per call ' +
+        'but never part of the default set.',
       inputSchema: z.object({
         url: z
           .string()
@@ -138,7 +145,8 @@ export function registerRemoveRelayTool(
     {
       title: 'Remove Relay',
       description:
-        'Remove an AMB relay from the query pool. Cannot remove the last relay.',
+        'Remove an AMB relay from the query pool. Cannot remove the last relay. ' +
+        'Env-configured extra relays cannot be removed here.',
       inputSchema: z.object({
         url: z.string().describe('URL of the relay to remove'),
       }),

@@ -31,6 +31,7 @@ export function scopesToProfile(scopes: string[]): ToolProfile {
 
 // Configuration from environment
 const AMB_RELAYS = process.env.AMB_RELAYS?.split(',') || ['wss://relay.edufeed.org'];
+const AMB_EXTRA_RELAYS = process.env.AMB_EXTRA_RELAYS?.split(',').filter(Boolean) || [];
 const AMB_AUTHOR_SETS = process.env.AMB_AUTHOR_SETS?.split(',').filter(Boolean) || [];
 const CALENDAR_RELAYS =
   process.env.CALENDAR_RELAYS?.split(',').filter(Boolean) || ['wss://relay.edufeed.org'];
@@ -51,6 +52,7 @@ const HTTP_ALLOWED_ORIGINS = process.env.HTTP_ALLOWED_ORIGINS?.split(',').map((s
 async function main() {
   console.log('Starting AMB Relay MCP Server (HTTP mode)...');
   console.log(`AMB Relays: ${AMB_RELAYS.join(', ')}`);
+  if (AMB_EXTRA_RELAYS.length) console.log(`AMB Extra Relays: ${AMB_EXTRA_RELAYS.join(', ')}`);
   console.log(`Calendar Relays: ${CALENDAR_RELAYS.join(', ')}`);
   console.log(`HTTP bind: ${HTTP_HOST}:${HTTP_PORT}`);
   console.log(`Auth: OAuth (issuer ${OAUTH_ISSUER})`);
@@ -107,6 +109,7 @@ async function main() {
         AMB_RELAYS,
         CALENDAR_RELAYS,
         scopesToProfile(scopes),
+        { ambExtraRelays: AMB_EXTRA_RELAYS },
       );
       return { server, dispose };
     },

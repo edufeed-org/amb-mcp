@@ -22,6 +22,7 @@ import { SERVER_NAME, SERVER_VERSION, SERVER_INSTRUCTIONS } from './server-info.
 
 // Configuration from environment
 const AMB_RELAYS = process.env.AMB_RELAYS?.split(',') || ['wss://relay.edufeed.org'];
+const AMB_EXTRA_RELAYS = process.env.AMB_EXTRA_RELAYS?.split(',').filter(Boolean) || [];
 const AMB_AUTHOR_SETS = process.env.AMB_AUTHOR_SETS?.split(',').filter(Boolean) || [];
 const CALENDAR_RELAYS = process.env.CALENDAR_RELAYS?.split(',').filter(Boolean) || ['wss://relay.edufeed.org'];
 const CALENDAR_AUTHOR_SETS = process.env.CALENDAR_AUTHOR_SETS?.split(',').filter(Boolean) || [];
@@ -41,11 +42,12 @@ async function main() {
 
   console.log('Starting AMB Relay MCP Server...');
   console.log(`AMB Relays: ${AMB_RELAYS.join(', ')}`);
+  if (AMB_EXTRA_RELAYS.length) console.log(`AMB Extra Relays: ${AMB_EXTRA_RELAYS.join(', ')}`);
   console.log(`Calendar Relays: ${CALENDAR_RELAYS.join(', ')}`);
   console.log(`ContextVM Relays: ${RELAYS.join(', ')}`);
 
   // Initialize AMB relay client
-  const ambClient = new AMBRelayClient(AMB_RELAYS);
+  const ambClient = new AMBRelayClient(AMB_RELAYS, { extraRelays: AMB_EXTRA_RELAYS });
 
   // Initialize calendar relay client
   const calendarClient = new AMBRelayClient(CALENDAR_RELAYS);

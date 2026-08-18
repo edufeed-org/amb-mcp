@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AMBRelayClient } from '../relay/client.js';
+import { resolveRelaysOrError } from './relaySelection.js';
 import { buildFilter, type SearchParams } from '../relay/filters.js';
 import { eventsToAMBResources, toSimplifiedResource } from '../utils/transform.js';
 
@@ -63,9 +64,21 @@ export function registerSearchTool(server: McpServer, client: AMBRelayClient): v
           .optional()
           .default(20)
           .describe('Maximum number of results (1-250, default: 20)'),
+        relays: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Restrict the search to specific relays. Only relays returned by list_relays ' +
+              '(default or extra) are accepted. Default: the default relay set.'
+          ),
       },
     },
     async (params) => {
+      const selection = resolveRelaysOrError(client, params.relays);
+      if ('errorPayload' in selection) {
+        return { content: [{ type: 'text', text: JSON.stringify(selection.errorPayload) }] };
+      }
+      const relaysSearched = selection.relays;
       const searchParams: SearchParams = {
         query: params.query,
         publisherName: params.publisherName,
@@ -84,8 +97,8 @@ export function registerSearchTool(server: McpServer, client: AMBRelayClient): v
 
       // Execute query
       const events = search
-        ? await client.search(search, filter)
-        : await client.query(filter);
+        ? await client.search(search, filter, relaysSearched)
+        : await client.query(filter, relaysSearched);
 
       // Transform to AMB resources
       const resources = eventsToAMBResources(events);
@@ -97,6 +110,7 @@ export function registerSearchTool(server: McpServer, client: AMBRelayClient): v
           {
             type: 'text',
             text: JSON.stringify({
+              relaysSearched,
               total: simplified.length,
               resources: simplified,
             }),

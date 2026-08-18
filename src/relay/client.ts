@@ -1,4 +1,5 @@
 import { SimplePool, type Filter, type NostrEvent } from 'nostr-tools';
+import { normalizeURL } from 'nostr-tools/utils';
 import WebSocket from 'ws';
 
 // Node 20 (the production runtime image) has no global WebSocket.
@@ -26,6 +27,33 @@ export interface RelayStatus {
 
 const DEFAULT_TIMEOUT = 10000;
 
+/**
+ * A per-call relay selection named a relay that is neither in the default set
+ * nor in the configured extra (selectable) set. Carries both lists so callers
+ * can produce a helpful error message.
+ */
+export class UnknownRelayError extends Error {
+  constructor(
+    public readonly unknownRelays: string[],
+    public readonly selectableRelays: string[]
+  ) {
+    super(
+      `Unknown relay(s): ${unknownRelays.join(', ')}. ` +
+        `Selectable relays: ${selectableRelays.join(', ')}`
+    );
+    this.name = 'UnknownRelayError';
+  }
+}
+
+/** Normalize for comparison only; configured URLs are kept verbatim. */
+function normalizeForMatch(url: string): string | null {
+  try {
+    return normalizeURL(url);
+  } catch {
+    return null;
+  }
+}
+
 /** Standard single-letter NIP-01 tag filters that events actually contain */
 const STANDARD_TAG_FILTERS = new Set([
   '#e', '#p', '#a', '#d', '#g', '#i', '#k', '#l', '#L', '#r', '#t',
@@ -38,8 +66,12 @@ function isStandardTagFilter(key: string): boolean {
 export class AMBRelayClient {
   private pool: SimplePool;
   private relayUrls: Set<string>;
+  private extraRelayUrls: Set<string>;
 
-  constructor(relayUrls: string | string[]) {
+  constructor(
+    relayUrls: string | string[],
+    options?: { extraRelays?: string[] }
+  ) {
     // The SimplePool TS signature only declares `enablePing|enableReconnect`,
     // but its runtime constructor spreads `...options` straight into
     // AbstractSimplePool, which honors `websocketImplementation`. Cast to skip
@@ -50,11 +82,29 @@ export class AMBRelayClient {
     this.relayUrls = new Set(
       Array.isArray(relayUrls) ? relayUrls : [relayUrls]
     );
+    const taken = new Set(
+      [...this.relayUrls].map((u) => normalizeForMatch(u) ?? u)
+    );
+    this.extraRelayUrls = new Set();
+    for (const url of options?.extraRelays ?? []) {
+      const norm = normalizeForMatch(url) ?? url;
+      if (taken.has(norm)) continue;
+      taken.add(norm);
+      this.extraRelayUrls.add(url);
+    }
   }
 
   // ============ Runtime relay management ============
 
   addRelay(url: string): void {
+    // A relay promoted into the default set must leave the extra set, or
+    // list_relays would report it in both groups.
+    const norm = normalizeForMatch(url) ?? url;
+    for (const extra of [...this.extraRelayUrls]) {
+      if ((normalizeForMatch(extra) ?? extra) === norm) {
+        this.extraRelayUrls.delete(extra);
+      }
+    }
     this.relayUrls.add(url);
   }
 
@@ -66,14 +116,56 @@ export class AMBRelayClient {
     return [...this.relayUrls];
   }
 
+  /** Relays that are selectable per call but not part of the default set. */
+  getExtraRelays(): string[] {
+    return [...this.extraRelayUrls];
+  }
+
+  /** Default ∪ extra — everything a per-call `relays` selection may name. */
+  getSelectableRelays(): string[] {
+    return [...this.relayUrls, ...this.extraRelayUrls];
+  }
+
+  /**
+   * Validate a per-call relay selection against the selectable set.
+   *
+   * No/empty selection falls back to the default relays. Requested URLs are
+   * matched modulo NIP-01 URL normalization but returned in their configured
+   * form (the strings the pool already knows). Any relay outside the
+   * selectable set throws UnknownRelayError.
+   */
+  resolveRelays(requested?: string[]): string[] {
+    if (!requested || requested.length === 0) {
+      return this.getRelays();
+    }
+    const byNormalized = new Map<string, string>();
+    for (const url of this.getSelectableRelays()) {
+      byNormalized.set(normalizeForMatch(url) ?? url, url);
+    }
+    const resolved: string[] = [];
+    const unknown: string[] = [];
+    for (const url of requested) {
+      const match = byNormalized.get(normalizeForMatch(url) ?? url);
+      if (match === undefined) {
+        unknown.push(url);
+      } else if (!resolved.includes(match)) {
+        resolved.push(match);
+      }
+    }
+    if (unknown.length > 0) {
+      throw new UnknownRelayError(unknown, this.getSelectableRelays());
+    }
+    return resolved;
+  }
+
   // ============ Query methods ============
 
   /**
    * Query with NIP-01 filters only
    */
-  async query(filter: Partial<Filter>): Promise<NostrEvent[]> {
+  async query(filter: Partial<Filter>, relays?: string[]): Promise<NostrEvent[]> {
     const fullFilter: Filter = { ...filter, kinds: [30142] };
-    return this.queryRelays(fullFilter);
+    return this.queryRelays(fullFilter, relays);
   }
 
   /**
@@ -81,14 +173,15 @@ export class AMBRelayClient {
    */
   async search(
     searchString: string,
-    filter: Partial<Filter> = {}
+    filter: Partial<Filter> = {},
+    relays?: string[]
   ): Promise<NostrEvent[]> {
     const fullFilter: Filter = {
       ...filter,
       kinds: [30142],
       search: searchString,
     };
-    return this.queryRelays(fullFilter);
+    return this.queryRelays(fullFilter, relays);
   }
 
   /**
@@ -104,18 +197,30 @@ export class AMBRelayClient {
   /**
    * Get a single event by its ID
    */
-  async getById(eventId: string, kinds: number[] = [30142]): Promise<NostrEvent | null> {
-    const events = await this.queryRelays({
-      ids: [eventId],
-      kinds,
-    });
+  async getById(
+    eventId: string,
+    kinds: number[] = [30142],
+    relays?: string[]
+  ): Promise<NostrEvent | null> {
+    const events = await this.queryRelays(
+      {
+        ids: [eventId],
+        kinds,
+      },
+      relays
+    );
     return events[0] ?? null;
   }
 
   /**
    * Get a single event by d-tag (and optionally author)
    */
-  async getByDTag(dTag: string, author?: string, kinds: number[] = [30142]): Promise<NostrEvent | null> {
+  async getByDTag(
+    dTag: string,
+    author?: string,
+    kinds: number[] = [30142],
+    relays?: string[]
+  ): Promise<NostrEvent | null> {
     const filter: Filter = {
       kinds,
       '#d': [dTag],
@@ -123,7 +228,7 @@ export class AMBRelayClient {
     if (author) {
       filter.authors = [author];
     }
-    const events = await this.queryRelays(filter);
+    const events = await this.queryRelays(filter, relays);
     return events[0] ?? null;
   }
 
@@ -142,8 +247,8 @@ export class AMBRelayClient {
    * the full filter (so the REQ includes extended props), then immediately
    * patch sub.filters to remove them before any events arrive.
    */
-  async queryEvents(filter: Filter): Promise<NostrEvent[]> {
-    const relays = this.getRelays();
+  async queryEvents(filter: Filter, relaySelection?: string[]): Promise<NostrEvent[]> {
+    const relays = this.resolveRelays(relaySelection);
     if (relays.length === 0) {
       return [];
     }
@@ -231,8 +336,8 @@ export class AMBRelayClient {
 
   // ============ Core query implementation ============
 
-  private async queryRelays(filter: Filter): Promise<NostrEvent[]> {
-    const relays = this.getRelays();
+  private async queryRelays(filter: Filter, relaySelection?: string[]): Promise<NostrEvent[]> {
+    const relays = this.resolveRelays(relaySelection);
     if (relays.length === 0) {
       return [];
     }
@@ -320,6 +425,6 @@ export class AMBRelayClient {
   // ============ Cleanup ============
 
   close(): void {
-    this.pool.close(this.getRelays());
+    this.pool.close(this.getSelectableRelays());
   }
 }

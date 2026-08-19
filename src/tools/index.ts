@@ -20,6 +20,7 @@ import { registerSignerTools } from './signer.js';
 import { registerPublishTools } from './publish.js';
 import { registerAuthorTools } from './authors.js';
 import { registerResolveAuthorTool } from './resolveAuthor.js';
+import { registerResolvePublisherTool } from './resolvePublisher.js';
 import { registerCalendarTools } from './calendar.js';
 import { registerExtractTool } from './extract.js';
 import { registerSearchContentTool } from './searchContent.js';
@@ -56,6 +57,7 @@ export function registerTools(
     registerSKOSTools(server);
     registerAuthorTools(server);
     registerResolveAuthorTool(server, client);
+    registerResolvePublisherTool(server, client);
     if (calendarClient) registerCalendarTools(server, calendarClient);
   }
 

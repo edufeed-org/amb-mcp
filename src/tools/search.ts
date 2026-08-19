@@ -3,7 +3,61 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AMBRelayClient } from '../relay/client.js';
 import { relaysNotSearched, resolveRelaysOrError } from './relaySelection.js';
 import { buildFilter, type SearchParams } from '../relay/filters.js';
-import { eventsToAMBResources, toSimplifiedResource } from '../utils/transform.js';
+import { eventsToAMBResources, toSimplifiedResource, type SimplifiedAMBResource } from '../utils/transform.js';
+import { findActorCandidates, type ActorCandidate } from './resolvePublisher.js';
+
+export interface ResourceSearchResult {
+  total: number;
+  resources: SimplifiedAMBResource[];
+  /** Similar actor spellings found when an exact publisher/creator filter matched nothing. */
+  actorCandidates?: ActorCandidate[];
+  /** Recovery guidance for the zero-match actor-filter case. */
+  hint?: string;
+}
+
+/**
+ * Execute a resource search. When a publisherName/creatorName filter matches
+ * nothing, fall back to a free-text search on that name and suggest the
+ * similar actor spellings the corpus actually uses — the filters are exact
+ * full-string matches, so a guessed spelling ("Lehreladen" vs the stored
+ * "LEHRE LADEN") would otherwise dead-end in a silent empty result.
+ */
+export async function runResourceSearch(
+  client: Pick<AMBRelayClient, 'search' | 'query'>,
+  params: SearchParams,
+  relays?: string[]
+): Promise<ResourceSearchResult> {
+  const { filter, search } = buildFilter(params);
+
+  const events = search
+    ? await client.search(search, filter, relays)
+    : await client.query(filter, relays);
+
+  const resources = eventsToAMBResources(events);
+  const lang = params.language || 'de';
+  const simplified = resources.map((r) => toSimplifiedResource(r, lang));
+  const result: ResourceSearchResult = { total: simplified.length, resources: simplified };
+
+  const actorName = params.publisherName ?? params.creatorName;
+  if (simplified.length === 0 && actorName) {
+    const candidates = await findActorCandidates(client, actorName, relays);
+    if (candidates.length > 0) {
+      result.actorCandidates = candidates;
+      result.hint =
+        `publisherName/creatorName filters are exact full-string matches; nothing matched ` +
+        `"${actorName}". Similar actor names in the corpus: ` +
+        candidates.map((c) => `${c.name} (${c.field}, ${c.count} sampled resources)`).join(', ') +
+        `. Retry with the exact spelling.`;
+    } else {
+      result.hint =
+        `publisherName/creatorName filters are exact full-string matches and nothing matched ` +
+        `"${actorName}"; no similar actor name was found either. The actor may not exist in ` +
+        `this corpus — try resolve_publisher, resolve_author, or a free-text query search.`;
+    }
+  }
+
+  return result;
+}
 
 /**
  * Register the search_resources tool
@@ -93,19 +147,8 @@ export function registerSearchTool(server: McpServer, client: AMBRelayClient): v
         limit: params.limit,
       };
 
-      const { filter, search } = buildFilter(searchParams);
-
-      // Execute query
-      const events = search
-        ? await client.search(search, filter, relaysSearched)
-        : await client.query(filter, relaysSearched);
-
+      const result = await runResourceSearch(client, searchParams, relaysSearched);
       const notSearched = relaysNotSearched(client, relaysSearched);
-
-      // Transform to AMB resources
-      const resources = eventsToAMBResources(events);
-      const lang = params.language || 'de';
-      const simplified = resources.map(r => toSimplifiedResource(r, lang));
 
       return {
         content: [
@@ -114,8 +157,7 @@ export function registerSearchTool(server: McpServer, client: AMBRelayClient): v
             text: JSON.stringify({
               relaysSearched,
               ...(notSearched.length > 0 ? { relaysNotSearched: notSearched } : {}),
-              total: simplified.length,
-              resources: simplified,
+              ...result,
             }),
           },
         ],

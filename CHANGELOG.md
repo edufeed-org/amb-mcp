@@ -6,6 +6,17 @@ All notable changes to amb-mcp are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`resolve_publisher` tool:** resolves an actor name to the exact
+  publisher/creator spelling used in the AMB metadata (e.g. "Lehreladen" →
+  "LEHRE LADEN"), since the metadata filters are exact full-string matches.
+  Complements `resolve_author`, which covers Nostr signing accounts only.
+- **Did-you-mean on empty actor filters:** when `publisherName`/`creatorName`
+  matches nothing, `search_resources` now returns `actorCandidates` (similar
+  spellings found in the corpus) and a `hint` explaining the exact-match
+  semantics, so agents can self-correct instead of dead-ending.
+
 ### Fixed
 
 - Field-filter values containing spaces (`publisherName`, `creatorName`,

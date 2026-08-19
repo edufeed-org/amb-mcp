@@ -4,7 +4,13 @@ All notable changes to amb-mcp are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/) (0.x — the API may still change between minors).
 
-## [Unreleased]
+## [0.3.0] - 2026-08-19
+
+Actor-name search made reliable: multi-word metadata filters were silently
+broken (unquoted spaces), and there was no way to discover the exact
+publisher spelling the corpus uses. This release fixes the quoting, adds a
+resolve_publisher tool plus did-you-mean suggestions on empty actor filters,
+and documents the exact-match semantics so agents stop guessing.
 
 ### Added
 

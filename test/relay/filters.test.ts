@@ -39,9 +39,29 @@ describe('buildFilter', () => {
     expect(result.search).toBe('educationalLevel.prefLabel.de:Hochschule');
   });
 
-  it('builds creator name filter', () => {
+  it('builds creator name filter, quoting the spaced value', () => {
     const result = buildFilter({ creatorName: 'Dr. Example' });
-    expect(result.search).toBe('creator.name:Dr. Example');
+    expect(result.search).toBe('creator.name:"Dr. Example"');
+  });
+
+  it('quotes publisher names containing spaces so the relay parses them as one filter value', () => {
+    const result = buildFilter({ publisherName: 'LEHRE LADEN' });
+    expect(result.search).toBe('publisher.name:"LEHRE LADEN"');
+  });
+
+  it('quotes multi-word label values', () => {
+    const result = buildFilter({ educationalLevelLabel: 'Sekundarstufe I' });
+    expect(result.search).toBe('educationalLevel.prefLabel.de:"Sekundarstufe I"');
+  });
+
+  it('leaves single-word values unquoted', () => {
+    const result = buildFilter({ publisherName: 'e-teaching.org' });
+    expect(result.search).toBe('publisher.name:e-teaching.org');
+  });
+
+  it('strips embedded double quotes that would break the relay tokenizer', () => {
+    const result = buildFilter({ publisherName: 'LEHRE "LADEN"' });
+    expect(result.search).toBe('publisher.name:"LEHRE LADEN"');
   });
 
   it('combines multiple filters in search string', () => {

@@ -123,13 +123,17 @@ export function buildGetFilter(
 }
 
 /**
- * Escape special characters in search values.
- * Values with spaces should be quoted if needed by the search backend.
+ * Escape a field-filter value for the relay's NIP-50 tokenizer.
+ *
+ * The tokenizer splits on spaces, so an unquoted spaced value degenerates
+ * into a filter on its first word plus stray free-text terms — which the
+ * relay then answers with unrelated results. It supports `field:"quoted
+ * value"`, so spaced values are wrapped in double quotes. Embedded double
+ * quotes are stripped: the tokenizer has no escape syntax for them.
  */
 function escapeSearchValue(value: string): string {
-  // If value contains spaces, it might need special handling
-  // For now, we pass through as-is since Typesense handles this
-  return value;
+  const cleaned = value.replace(/"/g, '');
+  return /\s/.test(cleaned) ? `"${cleaned}"` : cleaned;
 }
 
 const CONTENT_TYPE_KINDS: Record<ContentType, number[]> = {

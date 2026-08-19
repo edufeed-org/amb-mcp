@@ -4,6 +4,17 @@ All notable changes to amb-mcp are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/) (0.x — the API may still change between minors).
 
+## [Unreleased]
+
+### Fixed
+
+- Field-filter values containing spaces (`publisherName`, `creatorName`,
+  `subjectLabel`, `resourceTypeLabel`, `educationalLevelLabel`) are now
+  quoted in the NIP-50 search string. Unquoted, the relay tokenizer split
+  them into a filter on the first word plus stray free-text terms, so e.g.
+  `publisherName: "LEHRE LADEN"` or `educationalLevelLabel: "Sekundarstufe I"`
+  returned unrelated results instead of the filtered set.
+
 ## [0.2.1] - 2026-08-18
 
 Discoverability follow-up to 0.2.0: LLM clients assumed "configured ⇒

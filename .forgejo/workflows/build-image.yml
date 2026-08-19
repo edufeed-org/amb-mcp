@@ -33,9 +33,12 @@ jobs:
             TAGS="${TAGS} --tag ${IMAGE}:main --tag ${IMAGE}:latest"
           fi
 
+          # No registry buildcache: the cache export failed every run with
+          # "error writing layer blob" and marked green builds as failed,
+          # while the image itself had already pushed. The runner's local
+          # docker layer cache covers rebuilds; amb-relay builds the same
+          # way. See gitworkshop issue 6d4f17e7.
           docker buildx build \
             --push \
             ${TAGS} \
-            --cache-from type=registry,ref=${IMAGE}:buildcache \
-            --cache-to type=registry,ref=${IMAGE}:buildcache,mode=max \
             .

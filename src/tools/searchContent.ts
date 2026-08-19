@@ -70,7 +70,13 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
         query: z
           .string()
           .optional()
-          .describe('Free-text topic (e.g., "Unaufmerksamkeit im Seminar").'),
+          .describe(
+            'Free-text topic (e.g., "Unaufmerksamkeit im Seminar"). Keep it to the TOPIC ' +
+              'only — do not append actor/organization names ("… Lehreladen"): they dilute ' +
+              'the semantic ranking and the actor\'s content drops out of the top results. ' +
+              'To constrain by actor, resolve the name first (resolve_author → authors ' +
+              'param here; or resolve_publisher → search_resources publisherName).'
+          ),
         types: z
           .array(
             z.enum(['resource', 'article', 'wiki', 'project', 'measure', 'publication'])

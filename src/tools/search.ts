@@ -68,7 +68,14 @@ export function registerSearchTool(server: McpServer, client: AMBRelayClient): v
     {
       title: 'Search Educational Resources',
       description:
-        'Search for educational resources (learning materials, courses, videos, etc.) using full-text search and metadata filters. Returns resources matching the query from the AMB relay.',
+        'Search for educational resources (learning materials, courses, videos, etc.) using ' +
+        'full-text search and metadata filters. Returns resources matching the query from the ' +
+        'AMB relay. NOTE: the metadata filters (publisherName, creatorName, subjectLabel, ' +
+        'resourceTypeLabel, educationalLevelLabel) are EXACT full-string matches against the ' +
+        'stored metadata (case-insensitive) — not fuzzy or substring searches. A guessed ' +
+        'spelling silently returns 0 results; use resolve_publisher to find the canonical ' +
+        'actor spelling first. On a zero-match actor filter the response includes ' +
+        'actorCandidates with similar spellings to retry with.',
       inputSchema: {
         query: z
           .string()
@@ -77,23 +84,39 @@ export function registerSearchTool(server: McpServer, client: AMBRelayClient): v
         publisherName: z
           .string()
           .optional()
-          .describe('Filter by publisher name (e.g., "e-teaching.org")'),
+          .describe(
+            'Filter by publisher name — EXACT full-string match (case-insensitive) against ' +
+              'the AMB metadata, e.g. "e-teaching.org" or "LEHRE LADEN" (not "Lehreladen"). ' +
+              'Unsure of the spelling? Call resolve_publisher first.'
+          ),
         creatorName: z
           .string()
           .optional()
-          .describe('Filter by creator/author name'),
+          .describe(
+            'Filter by creator/author name — EXACT full-string match (case-insensitive) ' +
+              'against the AMB metadata. Unsure of the spelling? Call resolve_publisher first.'
+          ),
         subjectLabel: z
           .string()
           .optional()
-          .describe('Filter by subject/topic label (e.g., "Mathematik", "Physik")'),
+          .describe(
+            'Filter by subject/topic label — EXACT label match (e.g., "Mathematik", ' +
+              '"Physik"); browse_subjects lists valid labels'
+          ),
         resourceTypeLabel: z
           .string()
           .optional()
-          .describe('Filter by resource type label (e.g., "Video", "Kurs", "Arbeitsblatt")'),
+          .describe(
+            'Filter by resource type label — EXACT label match (e.g., "Video", "Kurs", ' +
+              '"Arbeitsblatt"); browse_resource_types lists valid labels'
+          ),
         educationalLevelLabel: z
           .string()
           .optional()
-          .describe('Filter by educational level (e.g., "Sekundarstufe I", "Hochschule")'),
+          .describe(
+            'Filter by educational level — EXACT label match (e.g., "Sekundarstufe I", ' +
+              '"Hochschule"); browse_educational_levels lists valid labels'
+          ),
         language: z
           .string()
           .optional()

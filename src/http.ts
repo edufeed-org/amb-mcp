@@ -13,9 +13,14 @@ import {
   setAuthorDirectory,
   setCalendarAuthorDirectory,
 } from './authors.js';
-import { startHttpServer } from './transport/http.js';
+import { startHttpServer, SessionConfigError } from './transport/http.js';
 import { createJwtVerifier } from './transport/auth.js';
 import { buildSessionServer } from './session.js';
+import {
+  buildRelayCatalog,
+  parseRelayNames,
+  UnknownRelayNameError,
+} from './relay/catalog.js';
 import { SERVER_NAME, SERVER_VERSION } from './server-info.js';
 import type { ToolProfile } from './tools/index.js';
 
@@ -26,6 +31,60 @@ export function scopesToProfile(scopes: string[]): ToolProfile {
     read: scopes.includes('mcp:read'),
     extract: scopes.includes('mcp:extract'),
     write: false, // write/signing tools are never exposed over HTTP
+  };
+}
+
+/**
+ * Decide a session's relay split from the URL its connector was added with.
+ *
+ * `?relays=sodix,oersi` makes exactly those relays the session's default set
+ * (searched on every query) and demotes the rest of the deployment's relays
+ * to extras (still selectable per call). Clients like Claude.ai only offer a
+ * name and a URL field, so the URL is the only place to express this.
+ *
+ * Names resolve through the catalog of relays this deployment already serves;
+ * an arbitrary URL is refused, so the endpoint never becomes an open
+ * WebSocket proxy. Anything unresolvable fails the connection loudly rather
+ * than silently falling back to the server default, which would leave the
+ * user searching a corpus they did not ask for.
+ */
+export function resolveSessionRelays(
+  query: URLSearchParams,
+  config: { defaults: string[]; extras: string[] },
+): { defaults: string[]; extras: string[]; fromConnectorUrl: boolean } {
+  const raw = query.get('relays');
+  if (raw === null) {
+    return { ...config, fromConnectorUrl: false };
+  }
+
+  const catalog = buildRelayCatalog([...config.defaults, ...config.extras]);
+  const names = parseRelayNames(raw);
+  if (names.length === 0) {
+    throw new SessionConfigError(
+      'The relays parameter names no relays.',
+      { knownNames: catalog.knownNames() },
+    );
+  }
+
+  let defaults: string[];
+  try {
+    defaults = catalog.resolve(names);
+  } catch (err) {
+    if (err instanceof UnknownRelayNameError) {
+      throw new SessionConfigError(err.message, {
+        unknownNames: err.unknownNames,
+        knownNames: err.knownNames,
+      });
+    }
+    throw err;
+  }
+
+  return {
+    defaults,
+    extras: catalog.entries()
+      .map((entry) => entry.url)
+      .filter((url) => !defaults.includes(url)),
+    fromConnectorUrl: true,
   };
 }
 
@@ -102,14 +161,22 @@ async function main() {
     allowedOrigins: HTTP_ALLOWED_ORIGINS,
     serverName: SERVER_NAME,
     serverVersion: SERVER_VERSION,
-    buildMcpServer: ({ scopes }) => {
+    buildMcpServer: ({ scopes, query }) => {
       // Per-session relay clients: each session starts from the configured
-      // defaults and can add/remove relays without affecting other sessions.
+      // defaults (or the ?relays= set its connector URL named) and can
+      // add/remove relays without affecting other sessions.
+      const relays = resolveSessionRelays(query, {
+        defaults: AMB_RELAYS,
+        extras: AMB_EXTRA_RELAYS,
+      });
       const { server, dispose } = buildSessionServer(
-        AMB_RELAYS,
+        relays.defaults,
         CALENDAR_RELAYS,
         scopesToProfile(scopes),
-        { ambExtraRelays: AMB_EXTRA_RELAYS },
+        {
+          ambExtraRelays: relays.extras,
+          defaultsFromConnectorUrl: relays.fromConnectorUrl,
+        },
       );
       return { server, dispose };
     },

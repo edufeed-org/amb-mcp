@@ -4,6 +4,26 @@ All notable changes to amb-mcp are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/) (0.x — the API may still change between minors).
 
+## [Unreleased]
+
+### Added
+
+- **Per-connection default relays via the connector URL:** the HTTP transport
+  reads a `?relays=` parameter off the `initialize` request, e.g.
+  `https://mcp.amb.edufeed.org/mcp?relays=sodix`. The named relays become that
+  session's default set; the rest of the deployment's relays stay selectable
+  per call. Connector UIs typically offer only a name and a URL field, so the
+  URL is the only place a connection can express which corpus it wants.
+  Relays answer to their full URL, their hostname, or the first label of their
+  hostname; a name the deployment does not serve fails `initialize` with HTTP
+  400 rather than silently falling back to the server default. Arbitrary URLs
+  are refused — the endpoint never opens sockets to caller-chosen hosts.
+- **SODIX relay** (`wss://sodix.edufeed.org`) documented as an
+  `AMB_EXTRA_RELAYS` member alongside the OERSI aggregation relay.
+- **`list_relays` reports `defaultRelaysSource`** (`server-config` or
+  `connector-url`), so a model can tell a deliberately narrowed session from
+  the deployment's standard corpus.
+
 ## [0.3.0] - 2026-08-19
 
 Actor-name search made reliable: multi-word metadata filters were silently

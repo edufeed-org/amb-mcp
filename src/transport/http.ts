@@ -11,6 +11,11 @@
  * 401); a valid token additionally grants its scopes (e.g. mcp:extract). The
  * PRM document is served unauthenticated at
  * /.well-known/oauth-protected-resource (RFC 9728).
+ *
+ * Per-connection config: the query string of the `initialize` request is
+ * handed to `buildMcpServer`, so a client can pin a session's behaviour in
+ * the URL it connects with (e.g. `/mcp?relays=sodix`). A factory that
+ * rejects the config throws SessionConfigError and no session is opened.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -26,6 +31,21 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { AuthContext } from './auth.js';
 import { AuthError } from './auth.js';
 import { buildProtectedResourceMetadata } from './prm.js';
+
+/**
+ * The `initialize` query string named a configuration the session factory
+ * cannot honour. Answered with HTTP 400 — the connection is misconfigured,
+ * not unauthorized, and retrying it unchanged will never work.
+ */
+export class SessionConfigError extends Error {
+  constructor(
+    message: string,
+    public readonly details?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'SessionConfigError';
+  }
+}
 
 export interface HttpServerOptions {
   port: number;
@@ -43,11 +63,13 @@ export interface HttpServerOptions {
   allowedOrigins?: string[];
   /**
    * Factory called once per new MCP session to build a fresh server.
-   * Receives the authenticated scopes so the session can be scope-gated.
-   * `dispose` (if returned) is invoked when the session closes, so the
-   * session's relay connections can be torn down.
+   * Receives the authenticated scopes so the session can be scope-gated, and
+   * the query string of the initialize request so the connection URL can
+   * configure the session. `dispose` (if returned) is invoked when the
+   * session closes, so the session's relay connections can be torn down.
+   * Throw SessionConfigError to refuse an unusable config with HTTP 400.
    */
-  buildMcpServer: (ctx: { scopes: string[] }) => {
+  buildMcpServer: (ctx: { scopes: string[]; query: URLSearchParams }) => {
     server: McpServer;
     dispose?: () => void | Promise<void>;
   };
@@ -144,6 +166,31 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
     let transport = sessionId ? transports.get(sessionId) : undefined;
 
     if (!transport && isInitializeRequest(req.body)) {
+      // Session config comes from the initialize URL only; later requests on
+      // this session are addressed by Mcp-Session-Id and carry no config.
+      const query = new URLSearchParams(req.originalUrl.split('?')[1] ?? '');
+
+      // Built before the transport so a rejected config opens no session.
+      // Tool profile is fixed at init time from the initializing token's scopes; it is not re-derived per subsequent request on this session.
+      let mcp: McpServer;
+      let dispose: (() => void | Promise<void>) | undefined;
+      try {
+        ({ server: mcp, dispose } = buildMcpServer({
+          scopes: (res.locals.scopes as string[]) ?? [],
+          query,
+        }));
+      } catch (err) {
+        if (err instanceof SessionConfigError) {
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: { code: -32602, message: err.message, ...(err.details ? { data: err.details } : {}) },
+            id: null,
+          });
+          return;
+        }
+        throw err;
+      }
+
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (id) => {
@@ -156,8 +203,6 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
         allowedHosts,
         allowedOrigins,
       });
-      // Tool profile is fixed at init time from the initializing token's scopes; it is not re-derived per subsequent request on this session.
-      const { server: mcp, dispose } = buildMcpServer({ scopes: (res.locals.scopes as string[]) ?? [] });
       transport.onclose = () => {
         if (transport?.sessionId) transports.delete(transport.sessionId);
         void dispose?.();

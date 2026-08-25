@@ -59,7 +59,7 @@ cp .env.example .env
 | Name | Used by | Default | Description |
 |------|---------|---------|-------------|
 | `AMB_RELAYS` | all transports | `wss://relay.edufeed.org` | Comma-separated AMB relay URLs. Queried by every content tool (`search_content`, `search_resources`, `get_resource`, `browse_*`, `resolve_author`, `relay_stats`) and used as default publish targets for the signing tools. |
-| `AMB_EXTRA_RELAYS` | all transports | _(empty)_ | Comma-separated AMB relay URLs that are *selectable but not searched by default*. `search_content`, `search_resources`, and `get_resource` accept a `relays` parameter naming relays from `AMB_RELAYS` ∪ `AMB_EXTRA_RELAYS` (anything else is rejected); `list_relays` advertises both groups as `defaultRelays`/`extraRelays`. Use this to expose alternative corpora (e.g. the OERSI aggregation relay) on request without merging them into every search. |
+| `AMB_EXTRA_RELAYS` | all transports | _(empty)_ | Comma-separated AMB relay URLs that are *selectable but not searched by default*. `search_content`, `search_resources`, and `get_resource` accept a `relays` parameter naming relays from `AMB_RELAYS` ∪ `AMB_EXTRA_RELAYS` (anything else is rejected); `list_relays` advertises both groups as `defaultRelays`/`extraRelays`. Use this to expose alternative corpora (e.g. the OERSI and SODIX aggregation relays, `wss://oersi.edufeed.org,wss://sodix.edufeed.org`) on request without merging them into every search. Over HTTP this list also feeds the `?relays=` connector parameter — see [Choosing a connector's default relays](#choosing-a-connectors-default-relays). |
 | `AMB_AUTHOR_SETS` | all transports | _(empty)_ | Comma-separated `naddr` identifiers of NIP-51 follow sets (kind 30000). Loaded once at startup into the author directory served by `list_known_authors`; the returned pubkeys can then be passed to `search_*` tools as `authors`. |
 | `CALENDAR_RELAYS` | all transports | `wss://relay.edufeed.org` | Comma-separated NIP-52 calendar relay URLs for `search_calendar_events`. The AMB relay serves calendar events itself, so the default is the same relay; set this only for split deployments with a dedicated calendar relay. |
 | `CALENDAR_AUTHOR_SETS` | all transports | _(empty)_ | Same as `AMB_AUTHOR_SETS`, but for the calendar author directory served by `list_calendar_authors`. |
@@ -161,6 +161,44 @@ Smoke-test with [MCP Inspector](https://github.com/modelcontextprotocol/inspecto
 ```bash
 npx @modelcontextprotocol/inspector http://localhost:3000/mcp
 ```
+
+#### Choosing a connector's default relays
+
+Most connector UIs (Claude.ai's "Add custom connector", for one) give you two
+fields: a name and a URL. So the URL is where a connection states which relays
+it wants searched by default:
+
+```
+https://mcp.amb.edufeed.org/mcp?relays=sodix
+https://mcp.amb.edufeed.org/mcp?relays=relay,sodix,oersi
+```
+
+The relays named in `?relays=` become that session's **default** set — searched
+on every `search_content` / `search_resources` call. Every other relay the
+deployment serves stays in the **extra** set: `list_relays` still advertises it,
+and a tool call can still reach it through its own `relays` parameter. Without
+the parameter, the session uses the server's configured default set, exactly as
+before.
+
+Names resolve against the relays the deployment already serves
+(`AMB_RELAYS` ∪ `AMB_EXTRA_RELAYS`). Each relay answers to three forms:
+
+| Form | Example |
+|---|---|
+| Full URL | `wss://sodix.edufeed.org` |
+| Hostname | `sodix.edufeed.org` |
+| First hostname label | `sodix` |
+
+A short label claimed by two relays is dropped rather than guessed at — use the
+hostname for those. A name the deployment does not serve fails the `initialize`
+request with HTTP 400 and a JSON-RPC error listing the names it does accept;
+the connection is never silently pointed at the server default. Arbitrary relay
+URLs are **not** accepted, so a public endpoint cannot be used to make the
+server open WebSocket connections to hosts of the caller's choosing.
+
+`list_relays` reports `defaultRelaysSource: "connector-url"` on such a session,
+so a model can tell a deliberately narrowed corpus from the deployment's
+standard one.
 
 #### Public deployment
 
@@ -294,7 +332,11 @@ Get relay information including name, description, and supported NIPs.
 
 ### list_relays
 
-List all AMB relays configured for the current session. The write profile
+List all AMB relays configured for the current session, split into
+`defaultRelays` (searched on every query) and `extraRelays` (selectable per
+call). `defaultRelaysSource` says whose choice the default set was —
+`server-config`, or `connector-url` when the connection URL named it via
+[`?relays=`](#choosing-a-connectors-default-relays). The write profile
 additionally exposes `add_relay` / `remove_relay` to adjust the session's relay
 set at runtime (per-session over HTTP; process-wide on stdio).
 

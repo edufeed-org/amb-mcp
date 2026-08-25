@@ -7,29 +7,48 @@ import { getSignerManager } from './signer.js';
 /**
  * list_relays payload: relay groups plus, when extras exist, an explicit
  * usage note — LLM clients otherwise assume "configured ⇒ searched".
+ *
+ * defaultRelaysSource tells the client whose choice the default set is: the
+ * server's own config, or the `relays` parameter of the URL this connector
+ * was added with. Without it a model cannot tell a deliberately narrowed
+ * session from the deployment's standard corpus.
  */
 export function runListRelays(
-  client: Pick<AMBRelayClient, 'getRelays' | 'getExtraRelays'>
+  client: Pick<AMBRelayClient, 'getRelays' | 'getExtraRelays'>,
+  options?: { defaultsFromConnectorUrl?: boolean }
 ): {
   defaultRelays: string[];
   extraRelays: string[];
+  defaultRelaysSource: 'server-config' | 'connector-url';
   count: number;
   note?: string;
 } {
   const defaultRelays = client.getRelays();
   const extraRelays = client.getExtraRelays();
+  const notes: string[] = [];
+
+  if (options?.defaultsFromConnectorUrl) {
+    notes.push(
+      'defaultRelays were chosen by the relays parameter of this connection URL, ' +
+        'not by the server default.'
+    );
+  }
+  if (extraRelays.length > 0) {
+    notes.push(
+      'extraRelays are NOT searched by default — they hold different corpora. ' +
+        'To query one, pass it in the relays parameter of search_content, ' +
+        'search_resources, or get_resource.'
+    );
+  }
+
   return {
     defaultRelays,
     extraRelays,
+    defaultRelaysSource: options?.defaultsFromConnectorUrl
+      ? 'connector-url'
+      : 'server-config',
     count: defaultRelays.length + extraRelays.length,
-    ...(extraRelays.length > 0
-      ? {
-          note:
-            'extraRelays are NOT searched by default — they hold different corpora. ' +
-            'To query one, pass it in the relays parameter of search_content, ' +
-            'search_resources, or get_resource.',
-        }
-      : {}),
+    ...(notes.length > 0 ? { note: notes.join(' ') } : {}),
   };
 }
 
@@ -38,7 +57,8 @@ export function runListRelays(
  */
 export function registerListRelaysTool(
   server: McpServer,
-  client: AMBRelayClient
+  client: AMBRelayClient,
+  options?: { defaultsFromConnectorUrl?: boolean }
 ): void {
   server.registerTool(
     'list_relays',
@@ -55,7 +75,7 @@ export function registerListRelaysTool(
         content: [
           {
             type: 'text',
-            text: JSON.stringify(runListRelays(client), null, 2),
+            text: JSON.stringify(runListRelays(client, options), null, 2),
           },
         ],
       };

@@ -57,4 +57,21 @@ describe('runListRelays', () => {
     expect(out.note).toBeUndefined();
     expect(out.count).toBe(1);
   });
+
+  it('attributes the default set to the server config by default', () => {
+    const out = runListRelays({
+      getRelays: () => [DEFAULT],
+      getExtraRelays: () => [],
+    });
+    expect(out.defaultRelaysSource).toBe('server-config');
+  });
+
+  it('reports a default set that the connection URL chose', () => {
+    const out = runListRelays(
+      { getRelays: () => [DEFAULT], getExtraRelays: () => [] },
+      { defaultsFromConnectorUrl: true },
+    );
+    expect(out.defaultRelaysSource).toBe('connector-url');
+    expect(out.note).toMatch(/connection URL/i);
+  });
 });

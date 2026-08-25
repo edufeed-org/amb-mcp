@@ -13,7 +13,35 @@ async function listToolNames(profile?: { read?: boolean; extract?: boolean; writ
   return names;
 }
 
+/** Invoke a session's registered list_relays tool and parse its JSON payload. */
+async function callListRelays(session: ReturnType<typeof buildSessionServer>) {
+  const tool = (
+    session.server as unknown as {
+      _registeredTools: Record<string, { handler: (...args: unknown[]) => Promise<{ content: { text: string }[] }> }>;
+    }
+  )._registeredTools['list_relays'];
+  const result = await tool.handler({}, {});
+  return JSON.parse(result.content[0].text);
+}
+
 describe('buildSessionServer per-session relay isolation', () => {
+  it('tells list_relays when the connector URL chose the default set', async () => {
+    const s = buildSessionServer(DEFAULTS, CAL_DEFAULTS, undefined, {
+      ambExtraRelays: ['wss://oersi.example'],
+      defaultsFromConnectorUrl: true,
+    });
+    const payload = await callListRelays(s);
+    expect(payload.defaultRelaysSource).toBe('connector-url');
+    s.dispose();
+  });
+
+  it('reports a server-configured default set as such', async () => {
+    const s = buildSessionServer(DEFAULTS, CAL_DEFAULTS);
+    const payload = await callListRelays(s);
+    expect(payload.defaultRelaysSource).toBe('server-config');
+    s.dispose();
+  });
+
   it('seeds the AMB client with selectable extra relays', () => {
     const s = buildSessionServer(DEFAULTS, CAL_DEFAULTS, undefined, {
       ambExtraRelays: ['wss://oersi.example'],

@@ -42,6 +42,7 @@ export function registerTools(
   client: AMBRelayClient,
   calendarClient?: AMBRelayClient,
   profile: ToolProfile = { read: true, extract: true, write: true },
+  options?: { defaultsFromConnectorUrl?: boolean },
 ): void {
   if (profile.read) {
     // Query / read tools
@@ -52,7 +53,7 @@ export function registerTools(
     registerBrowseResourceTypesTool(server, client);
     registerBrowseEducationalLevelsTool(server, client);
     registerStatsTool(server, client);
-    registerListRelaysTool(server, client);
+    registerListRelaysTool(server, client, options);
     registerRelayListGetTool(server, client);
     registerSKOSTools(server);
     registerAuthorTools(server);

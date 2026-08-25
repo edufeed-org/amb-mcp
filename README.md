@@ -170,7 +170,7 @@ it wants searched by default:
 
 ```
 https://mcp.amb.edufeed.org/mcp?relays=sodix
-https://mcp.amb.edufeed.org/mcp?relays=relay,sodix,oersi
+https://mcp.amb.edufeed.org/mcp?relays=amb-relay,sodix,oersi
 ```
 
 The relays named in `?relays=` become that session's **default** set — searched
@@ -190,7 +190,9 @@ Names resolve against the relays the deployment already serves
 | First hostname label | `sodix` |
 
 A short label claimed by two relays is dropped rather than guessed at — use the
-hostname for those. A name the deployment does not serve fails the `initialize`
+hostname for those. The names are per deployment: `list_relays` on a plain
+session shows exactly which relays a server offers, and a rejected `?relays=`
+lists every name it accepts. A name the deployment does not serve fails the `initialize`
 request with HTTP 400 and a JSON-RPC error listing the names it does accept;
 the connection is never silently pointed at the server default. Arbitrary relay
 URLs are **not** accepted, so a public endpoint cannot be used to make the
@@ -207,6 +209,11 @@ A managed instance is hosted at:
 ```
 https://mcp.amb.edufeed.org/mcp
 ```
+
+It serves three relays — `amb-relay` (`wss://amb-relay.edufeed.org`, the
+default), plus `oersi` and `sodix` as per-call extras — so
+`…/mcp?relays=sodix` gives a connector that searches the SODIX corpus by
+default. See [Choosing a connector's default relays](#choosing-a-connectors-default-relays).
 
 It speaks the same streamable-HTTP protocol as the local server. **Read tools are public** — a request with no `Authorization` header gets a read-only session (search/get/browse/resolve). The budget-spending `extract_metadata` tool requires a valid OAuth token carrying the `mcp:extract` scope; tokens are issued by the Keycloak realm out-of-band — ask the operator. The handshake is otherwise identical to the curl example above; just substitute the URL and drop the `Authorization` header for read-only use.
 

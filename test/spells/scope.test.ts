@@ -88,3 +88,22 @@ describe('buildScope — materialized', () => {
     expect(scope.chunkFilter.event_coord).toEqual([`30142:${'b'.repeat(64)}:z`]);
   });
 });
+
+describe('buildScope — client-side tag re-filtering (relay tag names it does not map)', () => {
+  it('rejects with empty_scope when the relay ignores an unmapped tag filter and returns events lacking it', async () => {
+    // amb-relay does not map '#doi' — a real relay would return every event
+    // it has, none of them carrying a 'doi' tag. Scope building must not
+    // trust that widened result.
+    const q = vi.fn(async () => [ev(30142, 'a'.repeat(64), 'x'), ev(30142, 'b'.repeat(64), 'y')]);
+    await expect(buildScope({ search: 'x', '#doi': ['10.1234/abcd'] }, q))
+      .rejects.toMatchObject({ code: 'empty_scope' });
+  });
+
+  it('keeps events carrying a matching tag and excludes events without it', async () => {
+    const withTag = { ...ev(30142, 'a'.repeat(64), 'x'), tags: [['d', 'x'], ['doi', '10.1234/abcd']] };
+    const withoutTag = ev(30142, 'b'.repeat(64), 'y');
+    const q = vi.fn(async () => [withTag, withoutTag]);
+    const scope = await buildScope({ search: 'x', '#doi': ['10.1234/abcd'] }, q);
+    expect(scope.chunkFilter.event_coord).toEqual([`30142:${'a'.repeat(64)}:x`]);
+  });
+});

@@ -8,6 +8,9 @@ export function parseSpellEvent(event: NostrEvent): Spell {
   if (event.kind !== SPELL_KIND) {
     throw new SpellError('not_a_spell', `event kind ${event.kind} is not a spell (777)`);
   }
+  if (event.tags.some((t) => t[0] === 'd')) {
+    throw new SpellError('not_a_spell', 'spells are immutable regular events — a d tag is not allowed');
+  }
   let cmd: string | undefined;
   const spell: Spell = { cmd: 'REQ' };
   const kinds: number[] = [];

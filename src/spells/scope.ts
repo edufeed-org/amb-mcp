@@ -26,6 +26,27 @@ function coordOf(e: NostrEvent): string | null {
 }
 
 /**
+ * amb-relay's query builder only maps a handful of tag names (#t/#r/#p/#a/#h
+ * + ns:facet shapes) — any other `#<letter>` filter is silently ignored
+ * server-side, so a materialized REQ for e.g. `#doi` comes back with every
+ * event the relay has, not just matches. Re-check every tag filter in the
+ * resolved filter client-side before an event is allowed into scope:
+ * standard NIP-01 semantics (OR within one letter's values, AND across
+ * letters).
+ */
+function matchesTagFilters(e: NostrEvent, filter: Filter): boolean {
+  for (const key of Object.keys(filter)) {
+    if (!key.startsWith('#')) continue;
+    const values = (filter as Record<string, string[] | undefined>)[key];
+    if (!values || values.length === 0) continue;
+    const letter = key.slice(1);
+    const ok = e.tags.some((t) => t[0] === letter && values.includes(t[1]));
+    if (!ok) return false;
+  }
+  return true;
+}
+
+/**
  * Turn a resolved NIP-01 filter into a /search_chunks scope. Authors/kinds-only
  * filters pass through; anything else materializes via one relay REQ.
  */
@@ -49,10 +70,11 @@ export async function buildScope(
 
   const limit = Math.min(filter.limit ?? MATERIALIZE_REQ_LIMIT, MATERIALIZE_REQ_LIMIT);
   const events = await queryEvents({ ...filter, limit });
+  const matched = events.filter((e) => matchesTagFilters(e, filter));
 
   const seen = new Set<string>();
   const withCoord: { coord: string; created_at: number }[] = [];
-  for (const e of events) {
+  for (const e of matched) {
     const coord = coordOf(e);
     if (!coord || seen.has(coord)) continue;
     seen.add(coord);

@@ -65,6 +65,12 @@ describe('parseSpellEvent', () => {
     );
   });
 
+  it('rejects a d-tagged spell — spells are immutable regular events', () => {
+    expect(() =>
+      parseSpellEvent(spellEvent([['cmd', 'REQ'], ['k', '1'], ['d', 'some-id']]))
+    ).toThrowError(expect.objectContaining({ code: 'not_a_spell' }));
+  });
+
   it('rejects COUNT spells as not groundable', () => {
     expect(() =>
       parseSpellEvent(spellEvent([['cmd', 'COUNT'], ['k', '1']]))

@@ -13,11 +13,17 @@ import { buildScope } from '../spells/scope.js';
 import { resolveRelaysOrError, relaysNotSearched } from './relaySelection.js';
 import { getSessionPubkey } from './signer.js';
 
+export interface FetchSpellResult {
+  event: NostrEvent | null;
+  /** Every relay actually queried (spell relays, then sanitized hints), for the not-found message. */
+  triedRelays: string[];
+}
+
 export interface SearchPassagesDeps {
   /** REQ against the effective AMB relay (materialize path). */
   queryContentEvents: (f: Filter) => Promise<NostrEvent[]>;
-  /** Fetch a kind-777 event by hex id (spell relays + hints). Null when absent. */
-  fetchSpellEvent: (idHex: string, hintRelays: string[]) => Promise<NostrEvent | null>;
+  /** Fetch a kind-777 event by hex id (spell relays + sanitized hints). Null when absent. */
+  fetchSpellEvent: (idHex: string, hintRelays: string[]) => Promise<FetchSpellResult>;
   /** Latest kind-3 p-tags for a pubkey ($contacts). */
   fetchContacts: (pubkeyHex: string) => Promise<string[]>;
   /** Scoped chunk search on the effective relay's indexer. */
@@ -44,6 +50,85 @@ function decodeSpellRef(v: string): { id: string; hints: string[] } {
   if (decoded.type === 'nevent') return { id: decoded.data.id, hints: decoded.data.relays ?? [] };
   if (decoded.type === 'note') return { id: decoded.data, hints: [] };
   throw new SpellError('spell_not_found', `not a spell reference (expected nevent/note/hex id): ${v}`);
+}
+
+export const MAX_HINT_RELAYS = 3;
+export const CONTACTS_FALLBACK_RELAY = 'wss://purplepag.es';
+
+/**
+ * nevent relay hints are caller-controlled and would otherwise be handed
+ * straight to a throwaway relay-client constructor — an unsanitized outbound
+ * connection surface. Keep only wss:// URLs, capped at MAX_HINT_RELAYS.
+ */
+export function sanitizeHintRelays(hints: string[]): string[] {
+  const safe: string[] = [];
+  for (const h of hints) {
+    if (safe.length >= MAX_HINT_RELAYS) break;
+    let parsed: URL;
+    try {
+      parsed = new URL(h);
+    } catch {
+      continue;
+    }
+    if (parsed.protocol === 'wss:') safe.push(h);
+  }
+  return safe;
+}
+
+interface ThrowawayClient {
+  queryEvents(filter: Filter): Promise<NostrEvent[]>;
+  close(): void;
+}
+type ClientFactory = (relays: string[]) => ThrowawayClient;
+
+/** Builds the `fetchSpellEvent` dep: spell relays first, then sanitized hints. */
+export function makeFetchSpellEvent(
+  spellClient: Pick<AMBRelayClient, 'queryEvents' | 'getRelays'>,
+  makeHintClient: ClientFactory = (relays) => new AMBRelayClient(relays)
+): (idHex: string, hints: string[]) => Promise<FetchSpellResult> {
+  return async (idHex, hints) => {
+    const filter = { ids: [idHex], kinds: [SPELL_KIND], limit: 1 };
+    const spellRelays = spellClient.getRelays();
+    const found = await spellClient.queryEvents(filter);
+    if (found.length > 0) return { event: found[0], triedRelays: spellRelays };
+
+    const safeHints = sanitizeHintRelays(hints);
+    const triedRelays = [...spellRelays, ...safeHints];
+    if (safeHints.length > 0) {
+      const hintClient = makeHintClient(safeHints);
+      try {
+        const viaHints = await hintClient.queryEvents(filter);
+        if (viaHints.length > 0) return { event: viaHints[0], triedRelays };
+      } finally {
+        hintClient.close();
+      }
+    }
+    return { event: null, triedRelays };
+  };
+}
+
+/** Builds the `fetchContacts` dep: SPELL_RELAYS, falling back to purplepag.es when empty. */
+export function makeFetchContacts(
+  spellClient: Pick<AMBRelayClient, 'queryEvents'>,
+  makeFallbackClient: ClientFactory = (relays) => new AMBRelayClient(relays)
+): (pubkeyHex: string) => Promise<string[]> {
+  const latestOf = (evs: NostrEvent[]): NostrEvent | undefined =>
+    evs.sort((a, b) => b.created_at - a.created_at)[0];
+
+  return async (pk) => {
+    const primary = await spellClient.queryEvents({ kinds: [3], authors: [pk], limit: 1 });
+    let latest = latestOf(primary);
+    if (!latest) {
+      const fallbackClient = makeFallbackClient([CONTACTS_FALLBACK_RELAY]);
+      try {
+        const fallback = await fallbackClient.queryEvents({ kinds: [3], authors: [pk], limit: 1 });
+        latest = latestOf(fallback);
+      } finally {
+        fallbackClient.close();
+      }
+    }
+    return latest ? latest.tags.filter((t) => t[0] === 'p' && t[1]).map((t) => t[1]) : [];
+  };
 }
 
 function resolveMe(paramMe: string | undefined, extra: unknown): string | undefined {
@@ -85,9 +170,12 @@ export async function runSearchPassages(
   let spellEventId: string | undefined;
   if (params.spell) {
     const ref = decodeSpellRef(params.spell);
-    const event = await deps.fetchSpellEvent(ref.id, ref.hints);
+    const { event, triedRelays } = await deps.fetchSpellEvent(ref.id, ref.hints);
     if (!event) {
-      throw new SpellError('spell_not_found', `spell ${ref.id} not found on the configured spell relays`);
+      throw new SpellError(
+        'spell_not_found',
+        `spell ${ref.id} not found on any of: ${triedRelays.join(', ')}`
+      );
     }
     spell = parseSpellEvent(event);
     spellEventId = event.id;
@@ -160,26 +248,8 @@ export function registerSearchPassagesTool(
       const deps: SearchPassagesDeps = {
         relay,
         queryContentEvents: (f) => client.queryEvents(f, [relay]),
-        fetchSpellEvent: async (idHex, hints) => {
-          const filter = { ids: [idHex], kinds: [SPELL_KIND], limit: 1 };
-          const found = await spellClient.queryEvents(filter);
-          if (found.length > 0) return found[0];
-          if (hints.length > 0) {
-            const hintClient = new AMBRelayClient(hints);
-            try {
-              const viaHints = await hintClient.queryEvents(filter);
-              if (viaHints.length > 0) return viaHints[0];
-            } finally {
-              hintClient.close();
-            }
-          }
-          return null;
-        },
-        fetchContacts: async (pk) => {
-          const evs = await spellClient.queryEvents({ kinds: [3], authors: [pk], limit: 1 });
-          const latest = evs.sort((a, b) => b.created_at - a.created_at)[0];
-          return latest ? latest.tags.filter((t) => t[0] === 'p' && t[1]).map((t) => t[1]) : [];
-        },
+        fetchSpellEvent: makeFetchSpellEvent(spellClient),
+        fetchContacts: makeFetchContacts(spellClient),
         searchChunks: (r, body) => indexer.searchChunks(r, body),
       };
       try {

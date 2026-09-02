@@ -8,7 +8,7 @@ Spells are Nostr kind-777 REQ/COUNT templates saved as signed events. They defin
 - **Clients & tools:** invoke a spell to search a specific subset (e.g., "all AMB educational resources")
 - **RAG systems:** use a spell as the query scope for grounding LLM responses on curated data (e.g., "search publications for this prompt")
 
-The spells here are pre-defined scopes over the edufeed relay's content types — educational materials (kind 30142), scientific publications (kind 30040), and upcoming events (kind 31923).
+The spells here are pre-defined scopes over the edufeed relay's content types — educational materials (kind 30142), scientific publications (kind 30040), and calendar events (kind 31923).
 
 ## Publishing Spells
 

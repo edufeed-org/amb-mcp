@@ -17,6 +17,12 @@ useWebSocketImplementation(WebSocket);
 const RELAYS = (process.env.SPELL_RELAYS ?? 'wss://relay.edufeed.org').split(',').filter(Boolean);
 const dryRun = process.argv.includes('--dry-run');
 
+// Guard: empty relay list is an error
+if (RELAYS.length === 0) {
+  console.error('Error: SPELL_RELAYS is empty. Explicitly empty relay list must not succeed.');
+  process.exit(1);
+}
+
 const nsec = process.env.EDUFEED_SPELLS_NSEC;
 if (!nsec) {
   console.error('EDUFEED_SPELLS_NSEC is required (never echo it).');
@@ -30,6 +36,8 @@ if (type !== 'nsec') {
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const pool = new SimplePool();
+let anyPublishFailed = false;
+
 for (const file of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
   const tmpl = JSON.parse(readFileSync(join(dir, file), 'utf8'));
   const event = finalizeEvent({ ...tmpl, created_at: Math.floor(Date.now() / 1000) }, sk);
@@ -37,7 +45,28 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
     console.log(`[dry-run] ${file} -> kind ${event.kind} id ${event.id}`);
     continue;
   }
-  await Promise.allSettled(pool.publish(RELAYS, event));
-  console.log(`published ${file}: kind ${event.kind} id ${event.id}`);
+
+  const results = await Promise.allSettled(pool.publish(RELAYS, event));
+  const fulfilled = results.filter((r) => r.status === 'fulfilled').length;
+  const rejected = results.filter((r) => r.status === 'rejected').length;
+
+  if (fulfilled === 0) {
+    // No relays accepted this event — this is a failure
+    anyPublishFailed = true;
+  }
+
+  console.log(`published ${file}: kind ${event.kind} id ${event.id} (${fulfilled}/${RELAYS.length} relays)`);
+
+  // Log rejections to stderr
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].status === 'rejected') {
+      console.error(`  ${RELAYS[i]}: ${results[i].reason}`);
+    }
+  }
 }
+
 pool.close(RELAYS);
+
+if (anyPublishFailed) {
+  process.exit(1);
+}

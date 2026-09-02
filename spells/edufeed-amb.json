@@ -1,0 +1,12 @@
+{
+  "kind": 777,
+  "content": "Alle Bildungsressourcen (AMB, kind 30142) des edufeed-Netzwerks — der Standard-Scope für RAG-Antworten über offene Bildungsmaterialien.",
+  "tags": [
+    ["cmd", "REQ"],
+    ["name", "Edufeed Bildungsressourcen"],
+    ["k", "30142"],
+    ["t", "edufeed"],
+    ["t", "oer"],
+    ["alt", "Spell: REQ für alle kind-30142 Bildungsressourcen"]
+  ]
+}

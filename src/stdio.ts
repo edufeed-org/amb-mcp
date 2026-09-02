@@ -14,6 +14,7 @@ import { registerTools } from './tools/index.js';
 import { registerResources } from './resources/index.js';
 import { loadAuthorSets, setAuthorDirectory, setCalendarAuthorDirectory } from './authors.js';
 import { SERVER_NAME, SERVER_VERSION, SERVER_INSTRUCTIONS } from './server-info.js';
+import { IndexerClient } from './indexer/client.js';
 
 // Configuration from environment
 const AMB_RELAYS = process.env.AMB_RELAYS?.split(',') || ['wss://relay.edufeed.org'];
@@ -21,6 +22,8 @@ const AMB_EXTRA_RELAYS = process.env.AMB_EXTRA_RELAYS?.split(',').filter(Boolean
 const AMB_AUTHOR_SETS = process.env.AMB_AUTHOR_SETS?.split(',').filter(Boolean) || [];
 const CALENDAR_RELAYS = process.env.CALENDAR_RELAYS?.split(',').filter(Boolean) || ['wss://relay.edufeed.org'];
 const CALENDAR_AUTHOR_SETS = process.env.CALENDAR_AUTHOR_SETS?.split(',').filter(Boolean) || [];
+const SPELL_RELAYS = process.env.SPELL_RELAYS?.split(',').filter(Boolean) || ['wss://relay.edufeed.org'];
+const indexer = IndexerClient.fromEnv(process.env.INDEXER_ENDPOINTS, process.env.INDEXER_API_TOKEN);
 
 async function main() {
   // All logs to stderr to not interfere with stdio protocol
@@ -35,6 +38,9 @@ async function main() {
   // Initialize calendar relay client
   const calendarClient = new AMBRelayClient(CALENDAR_RELAYS);
 
+  // Spell relay client (kind-777 spells + kind-3 contact lists for search_passages)
+  const spellClient = new AMBRelayClient(SPELL_RELAYS);
+
   // Create MCP server
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -42,7 +48,10 @@ async function main() {
   );
 
   // Register tools and resources
-  registerTools(server, ambClient, calendarClient);
+  registerTools(server, ambClient, calendarClient, { read: true, extract: true, write: true }, {
+    spellClient,
+    indexer: indexer ?? undefined,
+  });
   registerResources(server, ambClient);
 
   // Load known authors from follow sets if configured
@@ -81,6 +90,7 @@ async function main() {
     console.error('Shutting down...');
     ambClient.close();
     calendarClient.close();
+    spellClient.close();
     await server.close();
     process.exit(0);
   });
@@ -89,6 +99,7 @@ async function main() {
     console.error('Shutting down...');
     ambClient.close();
     calendarClient.close();
+    spellClient.close();
     await server.close();
     process.exit(0);
   });

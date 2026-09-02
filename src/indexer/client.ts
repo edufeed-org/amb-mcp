@@ -62,14 +62,27 @@ export class IndexerClient {
     if (!base) {
       throw new SpellError('no_indexer', `no passage index configured for relay ${relayUrl}`);
     }
-    const res = await this.fetchImpl(`${base}/search_chunks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
-      body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`${base}/search_chunks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new SpellError('indexer_error', `indexer at ${base} unreachable: ${msg}`);
+    }
     if (!res.ok) {
       throw new SpellError('indexer_error', `indexer at ${base} answered ${res.status}`);
     }
-    return (await res.json()) as { hits: PassageHit[]; total: number };
+    let data: { hits: PassageHit[]; total: number };
+    try {
+      data = (await res.json()) as { hits: PassageHit[]; total: number };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new SpellError('indexer_error', `indexer at ${base} returned invalid JSON: ${msg}`);
+    }
+    return data;
   }
 }

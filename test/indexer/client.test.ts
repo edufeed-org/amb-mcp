@@ -43,4 +43,18 @@ describe('searchChunks', () => {
     await expect(c.searchChunks('wss://r', { q: 'q', k: 1, filter: {} }))
       .rejects.toMatchObject({ code: 'indexer_error' });
   });
+
+  it('throws indexer_error on network failure', async () => {
+    const fetchImpl = vi.fn(async () => { throw new Error('ECONNREFUSED'); });
+    const c = new IndexerClient(new Map([['wss://r', 'https://ix']]), 'tok', fetchImpl as unknown as typeof fetch);
+    await expect(c.searchChunks('wss://r', { q: 'q', k: 1, filter: {} }))
+      .rejects.toMatchObject({ code: 'indexer_error' });
+  });
+
+  it('throws indexer_error on invalid JSON response', async () => {
+    const fetchImpl = vi.fn(async () => new Response('not-json{', { status: 200 }));
+    const c = new IndexerClient(new Map([['wss://r', 'https://ix']]), 'tok', fetchImpl as unknown as typeof fetch);
+    await expect(c.searchChunks('wss://r', { q: 'q', k: 1, filter: {} }))
+      .rejects.toMatchObject({ code: 'indexer_error' });
+  });
 });

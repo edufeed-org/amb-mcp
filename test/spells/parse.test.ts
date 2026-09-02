@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSpellEvent } from '../../src/spells/parse.js';
+import { parseSpellEvent, spellFromParams, spellToEventTemplate } from '../../src/spells/parse.js';
 import { SpellError, SPELL_KIND } from '../../src/spells/types.js';
 import type { Event as NostrEvent } from 'nostr-tools';
 
@@ -91,5 +91,42 @@ describe('parseSpellEvent', () => {
     expect(s.until).toBe('now');
     expect(s.ids).toEqual(['f'.repeat(64)]);
     expect(s.relays).toEqual(['wss://relay.edufeed.org']);
+  });
+});
+
+describe('spellFromParams', () => {
+  it('builds a REQ spell from inline scope', () => {
+    const s = spellFromParams({
+      authors: ['$me'],
+      kinds: [30142],
+      tag: { letter: 'h', values: ['e'.repeat(64)] },
+      search: 'klima',
+      since: '30d',
+    });
+    expect(s.cmd).toBe('REQ');
+    expect(s.kinds).toEqual([30142]);
+    expect(s.tagFilters).toEqual([{ letter: 'h', values: ['e'.repeat(64)] }]);
+    expect(s.since).toBe('30d');
+  });
+
+  it('rejects empty inline scope', () => {
+    expect(() => spellFromParams({})).toThrowError(
+      expect.objectContaining({ code: 'no_filter' })
+    );
+  });
+});
+
+describe('spellToEventTemplate', () => {
+  it('round-trips through parseSpellEvent', () => {
+    const original = spellFromParams({ kinds: [30142, 30040], authors: ['a'.repeat(64)], search: 'ki' });
+    const tmpl = spellToEventTemplate(original);
+    expect(tmpl.kind).toBe(777);
+    const reparsed = parseSpellEvent({
+      ...tmpl,
+      id: '0'.repeat(64), pubkey: '0'.repeat(64), created_at: 1, sig: '0'.repeat(128),
+    });
+    expect(reparsed.kinds).toEqual([30142, 30040]);
+    expect(reparsed.authors).toEqual(['a'.repeat(64)]);
+    expect(reparsed.search).toBe('ki');
   });
 });

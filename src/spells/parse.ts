@@ -74,3 +74,44 @@ export function parseSpellEvent(event: NostrEvent): Spell {
   }
   return spell;
 }
+
+export interface InlineScopeParams {
+  authors?: string[];
+  kinds?: number[];
+  tag?: SpellTagFilter;
+  search?: string;
+  since?: string;
+  until?: string;
+}
+
+/** Inline tool params become an in-memory spell — the one internal scope shape. */
+export function spellFromParams(p: InlineScopeParams): Spell {
+  const spell: Spell = { cmd: 'REQ' };
+  if (p.kinds?.length) spell.kinds = p.kinds;
+  if (p.authors?.length) spell.authors = p.authors;
+  if (p.tag) spell.tagFilters = [p.tag];
+  if (p.search) spell.search = p.search;
+  if (p.since) spell.since = p.since;
+  if (p.until) spell.until = p.until;
+  const hasFilter = FILTER_KEYS.some((k) => spell[k] !== undefined);
+  if (!hasFilter) {
+    throw new SpellError('no_filter', 'provide a spell or at least one scope parameter');
+  }
+  return spell;
+}
+
+/** Canonical, ready-to-sign kind-777 template (returned in every response). */
+export function spellToEventTemplate(s: Spell): { kind: 777; content: string; tags: string[][] } {
+  const tags: string[][] = [['cmd', s.cmd]];
+  if (s.name) tags.push(['name', s.name]);
+  for (const k of s.kinds ?? []) tags.push(['k', String(k)]);
+  if (s.authors?.length) tags.push(['authors', ...s.authors]);
+  if (s.ids?.length) tags.push(['ids', ...s.ids]);
+  for (const tf of s.tagFilters ?? []) tags.push(['tag', tf.letter, ...tf.values]);
+  if (s.search) tags.push(['search', s.search]);
+  if (s.since) tags.push(['since', s.since]);
+  if (s.until) tags.push(['until', s.until]);
+  if (s.limit !== undefined) tags.push(['limit', String(s.limit)]);
+  if (s.relays?.length) tags.push(['relays', ...s.relays]);
+  return { kind: 777, content: s.description ?? '', tags };
+}

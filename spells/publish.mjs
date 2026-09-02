@@ -47,20 +47,33 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
   }
 
   const results = await Promise.allSettled(pool.publish(RELAYS, event));
-  const fulfilled = results.filter((r) => r.status === 'fulfilled').length;
-  const rejected = results.filter((r) => r.status === 'rejected').length;
 
-  if (fulfilled === 0) {
+  // Count OK results: fulfilled AND not a connection-failure string.
+  // SimplePool resolves connection failures as strings like "connection failure: <err>",
+  // not rejections, so we must check the value.
+  let ok = 0;
+  for (const result of results) {
+    if (
+      result.status === 'fulfilled' &&
+      !(typeof result.value === 'string' && result.value.startsWith('connection failure'))
+    ) {
+      ok++;
+    }
+  }
+
+  if (ok === 0) {
     // No relays accepted this event — this is a failure
     anyPublishFailed = true;
   }
 
-  console.log(`published ${file}: kind ${event.kind} id ${event.id} (${fulfilled}/${RELAYS.length} relays)`);
+  console.log(`published ${file}: kind ${event.kind} id ${event.id} (${ok}/${RELAYS.length} relays)`);
 
-  // Log rejections to stderr
+  // Log failures to stderr: rejections and connection failures
   for (let i = 0; i < results.length; i++) {
     if (results[i].status === 'rejected') {
       console.error(`  ${RELAYS[i]}: ${results[i].reason}`);
+    } else if (typeof results[i].value === 'string' && results[i].value.startsWith('connection failure')) {
+      console.error(`  ${RELAYS[i]}: ${results[i].value}`);
     }
   }
 }

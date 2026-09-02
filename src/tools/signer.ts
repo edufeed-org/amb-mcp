@@ -34,6 +34,15 @@ function getUserId(extra: unknown): string {
 }
 
 /**
+ * The caller's connected NIP-46 signer pubkey, if any — used by
+ * search_passages to resolve $me when the transport itself is anonymous.
+ */
+export function getSessionPubkey(extra: unknown): string | null {
+  const status = getSignerManager().getStatus(getUserId(extra));
+  return status.connected && status.userPubkey ? status.userPubkey : null;
+}
+
+/**
  * Register signer_init tool
  *
  * Starts a connection flow by generating a QR code that can be scanned

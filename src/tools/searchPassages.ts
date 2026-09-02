@@ -166,8 +166,12 @@ export function registerSearchPassagesTool(
           if (found.length > 0) return found[0];
           if (hints.length > 0) {
             const hintClient = new AMBRelayClient(hints);
-            const viaHints = await hintClient.queryEvents(filter);
-            if (viaHints.length > 0) return viaHints[0];
+            try {
+              const viaHints = await hintClient.queryEvents(filter);
+              if (viaHints.length > 0) return viaHints[0];
+            } finally {
+              hintClient.close();
+            }
           }
           return null;
         },

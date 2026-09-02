@@ -32,6 +32,18 @@ describe('buildScope — passthrough', () => {
     const scope = await buildScope({ kinds: [30142], limit: 5 }, neverQuery);
     expect(scope.mode).toBe('passthrough');
   });
+
+  it('rejects empty authors with no filter', async () => {
+    await expect(buildScope({ authors: [] }, neverQuery))
+      .rejects.toMatchObject({ code: 'no_filter' });
+    expect(neverQuery).not.toHaveBeenCalled();
+  });
+
+  it('rejects empty filter with no kinds or authors', async () => {
+    await expect(buildScope({}, neverQuery))
+      .rejects.toMatchObject({ code: 'no_filter' });
+    expect(neverQuery).not.toHaveBeenCalled();
+  });
 });
 
 describe('buildScope — materialized', () => {

@@ -92,6 +92,18 @@ describe('parseSpellEvent', () => {
     expect(s.ids).toEqual(['f'.repeat(64)]);
     expect(s.relays).toEqual(['wss://relay.edufeed.org']);
   });
+
+  it('rejects a spell with only a valueless authors tag', () => {
+    expect(() =>
+      parseSpellEvent(spellEvent([['cmd', 'REQ'], ['authors']]))
+    ).toThrowError(expect.objectContaining({ code: 'no_filter' }));
+  });
+
+  it('rejects a spell with only a valueless ids tag', () => {
+    expect(() =>
+      parseSpellEvent(spellEvent([['cmd', 'REQ'], ['ids']]))
+    ).toThrowError(expect.objectContaining({ code: 'no_filter' }));
+  });
 });
 
 describe('spellFromParams', () => {

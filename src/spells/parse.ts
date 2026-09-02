@@ -28,10 +28,10 @@ export function parseSpellEvent(event: NostrEvent): Spell {
         break;
       }
       case 'authors':
-        spell.authors = [...(spell.authors ?? []), ...rest];
+        if (rest.length > 0) spell.authors = [...(spell.authors ?? []), ...rest];
         break;
       case 'ids':
-        spell.ids = [...(spell.ids ?? []), ...rest];
+        if (rest.length > 0) spell.ids = [...(spell.ids ?? []), ...rest];
         break;
       case 'tag':
         if (rest.length >= 2) tagFilters.push({ letter: rest[0], values: rest.slice(1) });

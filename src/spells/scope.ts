@@ -41,6 +41,9 @@ export async function buildScope(
       truncated = filter.authors.length > SCOPE_CAP;
       chunkFilter.pubkey = filter.authors.slice(0, SCOPE_CAP);
     }
+    if (!Object.keys(chunkFilter).length) {
+      throw new SpellError('no_filter', 'resolved filter selects nothing — no kinds or authors');
+    }
     return { mode: 'passthrough', chunkFilter, truncated };
   }
 

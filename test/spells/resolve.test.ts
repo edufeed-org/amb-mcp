@@ -68,4 +68,10 @@ describe('resolveSpell', () => {
     const f = await resolveSpell(spell, { fetchContacts: noContacts, nowSec: NOW });
     expect(f.limit).toBe(50);
   });
+
+  it('rejects malformed author strings with bad_pubkey', async () => {
+    const spell = spellFromParams({ authors: ['garbage-not-a-key'] });
+    await expect(resolveSpell(spell, { fetchContacts: noContacts, nowSec: NOW }))
+      .rejects.toMatchObject({ code: 'bad_pubkey' });
+  });
 });

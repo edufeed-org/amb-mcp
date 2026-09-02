@@ -26,9 +26,13 @@ export interface ResolveContext {
 
 function toHexPubkey(v: string): string {
   if (/^[0-9a-f]{64}$/.test(v)) return v;
-  const decoded = nip19.decode(v);
-  if (decoded.type === 'npub') return decoded.data;
-  throw new SpellError('not_a_spell', `not a pubkey: ${v}`);
+  try {
+    const decoded = nip19.decode(v);
+    if (decoded.type === 'npub') return decoded.data;
+  } catch {
+    throw new SpellError('bad_pubkey', `not a pubkey: ${v}`);
+  }
+  throw new SpellError('bad_pubkey', `not a pubkey: ${v}`);
 }
 
 /** Resolve variables + relative times into a concrete NIP-01 filter. */

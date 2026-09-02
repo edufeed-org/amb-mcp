@@ -32,6 +32,7 @@ export type SpellErrorCode =
   | 'count_not_groundable'
   | 'no_filter'
   | 'bad_time'
+  | 'bad_pubkey'
   | 'me_unresolvable'
   | 'contacts_empty'
   | 'spell_not_found'

@@ -10,9 +10,54 @@ describe('IndexerClient.fromEnv', () => {
     expect(c?.forRelay('wss://oersi.edufeed.org/')).toBe('https://indexer.oersi.edufeed.org');
     expect(c?.forRelay('wss://unknown.example')).toBeNull();
   });
-  it('returns null without spec or token', () => {
+  it('returns null without spec or any token', () => {
     expect(IndexerClient.fromEnv(undefined, 'tok')).toBeNull();
     expect(IndexerClient.fromEnv(SPEC, undefined)).toBeNull();
+    expect(IndexerClient.fromEnv(SPEC, undefined, undefined)).toBeNull();
+  });
+
+  it('accepts per-relay tokens without a default token', () => {
+    const tokens = 'wss://relay.edufeed.org=tokA, wss://oersi.edufeed.org=tokB';
+    const c = IndexerClient.fromEnv(SPEC, undefined, tokens);
+    expect(c).not.toBeNull();
+    expect(c?.forRelay('wss://relay.edufeed.org')).toBe('https://indexer.edufeed.org');
+  });
+
+  it('rejects a mapped endpoint that has neither a per-relay nor a default token', () => {
+    const tokens = 'wss://relay.edufeed.org=tokA'; // oersi endpoint left tokenless
+    expect(() => IndexerClient.fromEnv(SPEC, undefined, tokens))
+      .toThrow(/oersi\.edufeed\.org/);
+  });
+
+  it('rejects a malformed INDEXER_API_TOKENS entry', () => {
+    expect(() => IndexerClient.fromEnv(SPEC, 'tok', 'not-a-pair'))
+      .toThrow(/relay=token/);
+  });
+});
+
+describe('per-relay bearer tokens', () => {
+  const okResponse = () => new Response(JSON.stringify({ hits: [], total: 0 }), { status: 200 });
+
+  it('uses the per-relay token when one is configured, default otherwise', async () => {
+    const fetchImpl = vi.fn(async () => okResponse());
+    const c2 = new IndexerClient(
+      new Map([['wss://a', 'https://ix-a'], ['wss://b', 'https://ix-b']]),
+      'defaultTok',
+      fetchImpl as unknown as typeof fetch,
+      new Map([['wss://b', 'tokB']]),
+    );
+    await c2.searchChunks('wss://a', { q: 'q', k: 1, filter: {} });
+    await c2.searchChunks('wss://b', { q: 'q', k: 1, filter: {} });
+    expect((fetchImpl.mock.calls[0][1] as RequestInit).headers).toMatchObject({ Authorization: 'Bearer defaultTok' });
+    expect((fetchImpl.mock.calls[1][1] as RequestInit).headers).toMatchObject({ Authorization: 'Bearer tokB' });
+  });
+
+  it('throws indexer_error when a directly-constructed client has no token for a mapped relay', async () => {
+    const fetchImpl = vi.fn(async () => okResponse());
+    const c = new IndexerClient(new Map([['wss://r', 'https://ix']]), '', fetchImpl as unknown as typeof fetch);
+    await expect(c.searchChunks('wss://r', { q: 'q', k: 1, filter: {} }))
+      .rejects.toMatchObject({ code: 'indexer_error' });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
 

@@ -24,34 +24,59 @@ function normKey(url: string): string {
   }
 }
 
+function parsePairs(spec: string, envName: string, what: string): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const pair of spec.split(',').map((s) => s.trim()).filter(Boolean)) {
+    const i = pair.indexOf('=');
+    if (i <= 0) {
+      throw new Error(`${envName} entry is not relay=${what}: ${pair}`);
+    }
+    map.set(normKey(pair.slice(0, i)), pair.slice(i + 1));
+  }
+  return map;
+}
+
 /** Maps AMB relays to their amb-indexer /search_chunks endpoints. */
 export class IndexerClient {
   private readonly endpoints: Map<string, string>;
+  private readonly perRelayTokens: Map<string, string>;
 
   constructor(
     endpoints: Map<string, string>,
     private readonly token: string,
-    private readonly fetchImpl: typeof fetch = fetch
+    private readonly fetchImpl: typeof fetch = fetch,
+    perRelayTokens: Map<string, string> = new Map()
   ) {
     this.endpoints = new Map(Array.from(endpoints).map(([k, v]) => [normKey(k), v]));
+    this.perRelayTokens = new Map(Array.from(perRelayTokens).map(([k, v]) => [normKey(k), v]));
   }
 
-  /** INDEXER_ENDPOINTS="wss://relay=https://indexer,..." + INDEXER_API_TOKEN. */
-  static fromEnv(spec?: string, token?: string): IndexerClient | null {
-    if (!spec || !token) return null;
-    const map = new Map<string, string>();
-    for (const pair of spec.split(',').map((s) => s.trim()).filter(Boolean)) {
-      const i = pair.indexOf('=');
-      if (i <= 0) {
-        throw new Error(`INDEXER_ENDPOINTS entry is not relay=endpoint: ${pair}`);
+  /**
+   * INDEXER_ENDPOINTS="wss://relay=https://indexer,..." plus INDEXER_API_TOKEN
+   * (shared default) and/or INDEXER_API_TOKENS="wss://relay=token,..."
+   * (per-relay overrides — each deployed indexer instance has its own token).
+   * Every mapped endpoint must end up with a token; a partially tokened
+   * config is a boot-time error, not a runtime 401.
+   */
+  static fromEnv(spec?: string, token?: string, tokensSpec?: string): IndexerClient | null {
+    if (!spec || (!token && !tokensSpec)) return null;
+    const endpoints = parsePairs(spec, 'INDEXER_ENDPOINTS', 'endpoint');
+    for (const [k, v] of endpoints) endpoints.set(k, v.replace(/\/+$/, ''));
+    const perRelay = tokensSpec ? parsePairs(tokensSpec, 'INDEXER_API_TOKENS', 'token') : new Map<string, string>();
+    for (const relay of endpoints.keys()) {
+      if (!token && !perRelay.get(relay)) {
+        throw new Error(`no indexer API token for ${relay}: set INDEXER_API_TOKEN or add it to INDEXER_API_TOKENS`);
       }
-      map.set(normKey(pair.slice(0, i)), pair.slice(i + 1).replace(/\/+$/, ''));
     }
-    return new IndexerClient(map, token);
+    return new IndexerClient(endpoints, token ?? '', fetch, perRelay);
   }
 
   forRelay(relayUrl: string): string | null {
     return this.endpoints.get(normKey(relayUrl)) ?? null;
+  }
+
+  private tokenFor(relayUrl: string): string {
+    return this.perRelayTokens.get(normKey(relayUrl)) || this.token;
   }
 
   async searchChunks(
@@ -62,11 +87,15 @@ export class IndexerClient {
     if (!base) {
       throw new SpellError('no_indexer', `no passage index configured for relay ${relayUrl}`);
     }
+    const bearer = this.tokenFor(relayUrl);
+    if (!bearer) {
+      throw new SpellError('indexer_error', `no API token configured for indexer at ${base}`);
+    }
     let res: Response;
     try {
       res = await this.fetchImpl(`${base}/search_chunks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bearer}` },
         body: JSON.stringify(body),
       });
     } catch (err) {

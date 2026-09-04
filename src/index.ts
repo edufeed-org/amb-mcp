@@ -33,7 +33,7 @@ const RELAYS = process.env.RELAYS?.split(',') || [
   'wss://cvm.otherstuff.ai',
 ];
 const SPELL_RELAYS = process.env.SPELL_RELAYS?.split(',').filter(Boolean) || ['wss://relay.edufeed.org'];
-const indexer = IndexerClient.fromEnv(process.env.INDEXER_ENDPOINTS, process.env.INDEXER_API_TOKEN);
+const indexer = IndexerClient.fromEnv(process.env.INDEXER_ENDPOINTS, process.env.INDEXER_API_TOKEN, process.env.INDEXER_API_TOKENS);
 
 async function main() {
   // Validate required configuration

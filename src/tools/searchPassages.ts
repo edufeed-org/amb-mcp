@@ -219,7 +219,12 @@ export function registerSearchPassagesTool(
         'scope defined by a grimoire spell (kind 777) — pass a published spell (nevent or ' +
         'event id) OR inline scope (authors/kinds/tag/search/since/until); one is required, not both. ' +
         'Returns ranked passages with citations (source resource, page, heading, source URL) — ' +
-        'use them to answer the user and cite the sources. The response also carries the ' +
+        'use them to answer the user and cite the sources. Keep `question` topic-only; route source ' +
+        'restrictions ("nur Content von X") into the scope parameters: a metadata publisher ' +
+        '(most organisations — resolve_publisher finds the exact spelling) goes into `search` as a ' +
+        'QUOTED field filter, e.g. search:\'publisher.name:"LEHRE LADEN"\' (unquoted multi-word ' +
+        'names match nothing); a Nostr signing account (resolve_author → pubkey) goes into `authors`. ' +
+        'The response also carries the ' +
         'canonical spell for the scope; publish it (e.g. via grimoire) to make the scope reusable. ' +
         'Spells may use $me/$contacts; they resolve to the calling user (pass `me` if the ' +
         'transport is anonymous). Fails rather than widening scope: an empty scope or ' +
@@ -227,11 +232,11 @@ export function registerSearchPassagesTool(
       inputSchema: {
         question: z.string().describe('The question or topic to find grounding passages for.'),
         spell: z.string().optional().describe('Published spell: nevent, note id, or 64-hex event id.'),
-        authors: z.array(z.string()).optional().describe('Inline scope: author pubkeys (hex/npub/$me/$contacts).'),
+        authors: z.array(z.string()).optional().describe('Inline scope: Nostr event-author pubkeys (hex/npub/$me/$contacts) — resolve names via resolve_author. NOT for metadata publishers; those go into `search`.'),
         kinds: z.array(z.number()).optional().describe('Inline scope: content kinds (e.g. 30142).'),
         tag: z.object({ letter: z.string(), values: z.array(z.string()) }).optional()
           .describe('Inline scope: one tag filter, e.g. {letter:"h", values:["<community-pk>"]}.'),
-        search: z.string().optional().describe('Inline scope: NIP-50 term selecting the EVENTS in scope (distinct from question).'),
+        search: z.string().optional().describe('Inline scope: NIP-50 term selecting the EVENTS in scope (distinct from question). Supports field filters; quote multi-word values: publisher.name:"LEHRE LADEN".'),
         since: z.string().optional().describe('Inline scope: absolute Unix seconds or relative (7d, 1mo, now).'),
         until: z.string().optional().describe('Inline scope: absolute Unix seconds or relative.'),
         me: z.string().optional().describe('Who $me refers to (npub or hex). Defaults to the calling identity.'),

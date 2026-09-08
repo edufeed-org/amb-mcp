@@ -18,6 +18,7 @@ Releases are tagged (`v0.1.0`, …) and listed in [CHANGELOG.md](CHANGELOG.md).
 
 ### Query & Browse
 - Cross-content full-text search (`search_content`) across educational resources, long-form articles, wikis, transferkiosk projects/measures, and NKBIP-01 scientific publications in one ranked call
+- Grounded passage retrieval (`search_passages`) — answers a question from the corpus's fulltext with citations, scoped by a grimoire spell (kind 777) or inline scope; requires the indexer
 - Semantic snippet passages from chunk re-ranking surfaced per result when the relay's re-ranking is active
 - Full-text search with NIP-50
 - Filter by publisher, creator, subject, resource type, educational level
@@ -221,6 +222,8 @@ default. See [Choosing a connector's default relays](#choosing-a-connectors-defa
 
 It speaks the same streamable-HTTP protocol as the local server. **Read tools are public** — a request with no `Authorization` header gets a read-only session (search/get/browse/resolve). The budget-spending `extract_metadata` tool requires a valid OAuth token carrying the `mcp:extract` scope; tokens are issued by the Keycloak realm out-of-band — ask the operator. The handshake is otherwise identical to the curl example above; just substitute the URL and drop the `Authorization` header for read-only use.
 
+The public endpoint is rate-limited per source IP at the edge (Traefik) — `search_passages` in particular embeds each query on the in-stack CPU service, so bursts are throttled. Normal interactive use is unaffected.
+
 ## Available Tools
 
 Tools are grouped into three profiles:
@@ -237,7 +240,14 @@ projects (30143), transferkiosk measures (30144), and NKBIP-01 scientific
 publications (30040 indices + 30041 sections — academic articles, books).
 Results are interleaved and ranked by semantic passage match; each carries
 the matched passage (`snippet`) when the relay's chunk re-ranking is active.
-This is the default entry point for natural-language questions.
+
+**Discovery vs. question intent.** When `search_passages` is available (the
+indexer is configured), the two tools split by intent: `search_content` is
+for **discovery** — the user wants materials to browse ("finde/empfiehl
+Materialien zu X"), and you present the items as links. For a **question**
+the user wants answered from the sources ("wie/warum/was hilft bei X?"), use
+`search_passages` instead. When the indexer is not configured,
+`search_content` is the default entry point for natural-language questions.
 
 Parameters:
 | Name | Type | Description |
@@ -249,9 +259,52 @@ Parameters:
 | `authors` | string[] | Author pubkeys (hex) |
 | `limit` | number | Max results, 1-250 (default 20) |
 | `community` | string | Return content shared into this community (hex pubkey or npub) |
+| `relays` | string[] | Restrict to specific relays — by full URL or short name (`oersi`, `sodix`). See [`list_relays`](#list_relays). |
 
 Each result: `{ type, kind, title, url?, naddr?, snippet?, score?, ...type-specific }`.
 For upcoming events on the same topic, follow up with `search_calendar_events`.
+
+If a selected relay times out or is unreachable, the response adds
+`relaysIncomplete` (the affected relays) and a `warning` — an empty or short
+result under that warning is **not** proof the corpus is empty. Absent those
+fields, every relay answered.
+
+### search_passages
+
+Grounded RAG: retrieves the best-matching **fulltext passages** for a
+question and returns them with citations (source resource, page, heading,
+source URL) — answer the user *from* the passages and cite each source. This
+is the default tool for question-shaped queries; use `search_content` for
+discovery. Requires the indexer (`INDEXER_ENDPOINTS`); absent that config the
+tool is not registered.
+
+Scope is **required** (the tool never runs an unscoped search) but usually
+trivial — with no source restriction, pass the content kinds. A restriction
+routes into scope: a metadata **publisher** (`resolve_publisher` finds the
+exact spelling) into `search` as a quoted field filter
+(`publisher.name:"LEHRE LADEN"`); a Nostr **signer** (`resolve_author`) into
+`authors`. Scope can also come from a published **grimoire spell** (kind 777)
+passed by `nevent`/event id; every response echoes the canonical spell for
+the scope so it can be published and reused. Spells may use `$me`/`$contacts`,
+resolved to the caller (pass `me` when the transport is anonymous).
+
+Parameters:
+| Name | Type | Description |
+|------|------|-------------|
+| `question` | string | The question/topic to find grounding passages for |
+| `spell` | string | Published spell: `nevent`, note id, or 64-hex event id (alternative to inline scope) |
+| `authors` | string[] | Inline scope: signer pubkeys (hex/npub/`$me`/`$contacts`) |
+| `kinds` | number[] | Inline scope: content kinds (e.g. `[30142]`) |
+| `tag` | object | Inline scope: one tag filter, `{ letter, values }` |
+| `search` | string | Inline scope: NIP-50 term selecting the events in scope (quote multi-word field values) |
+| `since` / `until` | string | Inline scope: absolute Unix seconds or relative (`7d`, `1mo`, `now`) |
+| `me` | string | Who `$me` refers to (npub/hex); defaults to the calling identity |
+| `relays` | string[] | Relay selection (full URL or short name); first mapped relay is used |
+| `limit` | number | Passages to return, 1-25 (default 10) |
+
+Failure is explicit, never a silent unscoped search: `empty_scope` (the relay
+answered but nothing matched), `relay_unreachable` (the content relay did not
+answer — retry), `spell_not_found`, `no_indexer`, `indexer_error`.
 
 **Facet-in-query syntax:** relay-side facets ride inside `query` as NIP-50
 field filters rather than as separate parameters — append them to the
@@ -278,6 +331,13 @@ Parameters:
 | `authors` | string[] | Filter by author pubkeys (hex) — e.g. from `resolve_author` or `list_known_authors` |
 | `since` / `until` | number | Unix timestamp bounds on resource creation time |
 | `limit` | number | Max results, 1-250 (default: 20) |
+| `relays` | string[] | Restrict to specific relays — by full URL or short name (`oersi`, `sodix`) |
+
+The `subjectLabel` / `resourceTypeLabel` / `educationalLevelLabel` filters are
+**exact** label matches (case-insensitive), not free text — a phrase that
+isn't a stored label returns 0. Put topic words in `query`; use `browse_*`
+to discover valid labels. `publisherName` / `creatorName` are exact too, but
+suggest near spellings (`actorCandidates`) on a zero-match.
 
 ### get_resource
 
@@ -303,6 +363,12 @@ Each returned resource includes the standard AMB fields plus:
 
 - `nostr.naddr` — NIP-19 addressable identifier (`kind=30142`, pubkey, d-tag). Useful for any Nostr client.
 - `url` — direct link to the edufeed-app page for this resource. **Only present when `EDUFEED_APP_BASE_URL` is configured.** LLM clients should cite this as a markdown link (`[name](url)`) when recommending the resource so users can open it.
+
+`search_content`, `search_resources`, and `search_calendar_events` add
+`relaysIncomplete` + a `warning` when a selected relay timed out or was
+unreachable — under that warning an empty result is not proof the corpus is
+empty, so tell the user a source was unreachable and offer to retry. When
+every relay answers, neither field appears.
 
 ### resolve_author
 
@@ -345,7 +411,11 @@ Get relay information including name, description, and supported NIPs.
 
 List all AMB relays configured for the current session, split into
 `defaultRelays` (searched on every query) and `extraRelays` (selectable per
-call). `defaultRelaysSource` says whose choice the default set was —
+call). A `relays` parameter (on `search_content`, `search_resources`,
+`get_resource`, `search_passages`) names relays from either group by full
+URL **or short name** — the hostname or first label (`oersi`, `sodix`,
+`amb-relay`), case-insensitive; an ambiguous label shared by two relays
+resolves only by its longer forms. `defaultRelaysSource` says whose choice the default set was —
 `server-config`, or `connector-url` when the connection URL named it via
 [`?relays=`](#choosing-a-connectors-default-relays). The write profile
 additionally exposes `add_relay` / `remove_relay` to adjust the session's relay

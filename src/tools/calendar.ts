@@ -4,6 +4,7 @@ import type { AMBRelayClient } from '../relay/client.js';
 import { buildCalendarFilter } from '../calendar/filters.js';
 import { eventsToCalendarEvents } from '../calendar/transform.js';
 import { getCalendarAuthorDirectory } from '../authors.js';
+import { newRelayDiagnostics, relayDiagnosticsFields } from './relaySelection.js';
 
 /**
  * Register calendar event tools with the MCP server
@@ -123,7 +124,8 @@ export function registerCalendarTools(
         limit: params.limit,
       });
 
-      const events = await calendarClient.queryEvents(filter);
+      const diag = newRelayDiagnostics();
+      const events = await calendarClient.queryEvents(filter, undefined, { diag });
       const calendarEvents = eventsToCalendarEvents(events);
 
       return {
@@ -133,6 +135,7 @@ export function registerCalendarTools(
             text: JSON.stringify({
               total: calendarEvents.length,
               events: calendarEvents,
+              ...relayDiagnosticsFields(diag),
             }),
           },
         ],

@@ -67,6 +67,19 @@ function normalizeForMatch(url: string): string | null {
   }
 }
 
+/**
+ * Per-relay outcome of a lenient query, so a tool can tell "the corpus is
+ * empty" from "a relay didn't answer." A caller passes an empty object and
+ * reads it back after the query. `timedOut`/`unreachable` list the relays
+ * that connected-but-never-finished / refused a connection; on the querySync
+ * path (search_resources) `timedOut` is coarse — on a timeout it names every
+ * queried relay, since that path can't attribute the stall to one relay.
+ */
+export interface RelayQueryDiagnostics {
+  unreachable: string[];
+  timedOut: string[];
+}
+
 /** Standard single-letter NIP-01 tag filters that events actually contain */
 const STANDARD_TAG_FILTERS = new Set([
   '#e', '#p', '#a', '#d', '#g', '#i', '#k', '#l', '#L', '#r', '#t',
@@ -81,10 +94,13 @@ export class AMBRelayClient {
   private relayUrls: Set<string>;
   private extraRelayUrls: Set<string>;
 
+  private readonly queryTimeoutMs: number;
+
   constructor(
     relayUrls: string | string[],
-    options?: { extraRelays?: string[] }
+    options?: { extraRelays?: string[]; queryTimeoutMs?: number }
   ) {
+    this.queryTimeoutMs = options?.queryTimeoutMs ?? DEFAULT_TIMEOUT;
     // The SimplePool TS signature only declares `enablePing|enableReconnect`,
     // but its runtime constructor spreads `...options` straight into
     // AbstractSimplePool, which honors `websocketImplementation`. Cast to skip
@@ -193,9 +209,13 @@ export class AMBRelayClient {
   /**
    * Query with NIP-01 filters only
    */
-  async query(filter: Partial<Filter>, relays?: string[]): Promise<NostrEvent[]> {
+  async query(
+    filter: Partial<Filter>,
+    relays?: string[],
+    diag?: RelayQueryDiagnostics
+  ): Promise<NostrEvent[]> {
     const fullFilter: Filter = { ...filter, kinds: [30142] };
-    return this.queryRelays(fullFilter, relays);
+    return this.queryRelays(fullFilter, relays, diag);
   }
 
   /**
@@ -204,14 +224,15 @@ export class AMBRelayClient {
   async search(
     searchString: string,
     filter: Partial<Filter> = {},
-    relays?: string[]
+    relays?: string[],
+    diag?: RelayQueryDiagnostics
   ): Promise<NostrEvent[]> {
     const fullFilter: Filter = {
       ...filter,
       kinds: [30142],
       search: searchString,
     };
-    return this.queryRelays(fullFilter, relays);
+    return this.queryRelays(fullFilter, relays, diag);
   }
 
   /**
@@ -280,12 +301,13 @@ export class AMBRelayClient {
   async queryEvents(
     filter: Filter,
     relaySelection?: string[],
-    opts?: { strict?: boolean }
+    opts?: { strict?: boolean; diag?: RelayQueryDiagnostics }
   ): Promise<NostrEvent[]> {
     const strict = opts?.strict ?? false;
     const relays = this.resolveRelays(relaySelection);
     if (relays.length === 0) {
       if (strict) throw new RelayUnreachableError(relaySelection ?? [], 'no relays in selection');
+      if (opts?.diag) opts.diag.unreachable = relaySelection ?? [];
       return [];
     }
 
@@ -301,18 +323,23 @@ export class AMBRelayClient {
     const events: NostrEvent[] = [];
     const seen = new Set<string>();
     let pendingRelays: number;
+    // Per-relay outcome, hoisted so the diagnostics can be read after the
+    // race resolves (success OR lenient timeout): unreachable = refused a
+    // connection; a connected relay not in `settled` never sent EOSE/close.
+    const unreachable: string[] = [];
+    const connectedRelays: string[] = [];
+    const settled = new Set<string>();
 
     const result = await Promise.race([
       new Promise<NostrEvent[]>(async (resolve, reject) => {
         const subs: Array<{ close(reason?: string): void }> = [];
-        const connectedRelays: string[] = [];
 
         for (const url of relays) {
           try {
-            const relay = await this.pool.ensureRelay(url);
+            await this.pool.ensureRelay(url);
             connectedRelays.push(url);
           } catch {
-            // skip unreachable relays
+            unreachable.push(url);
           }
         }
 
@@ -342,12 +369,14 @@ export class AMBRelayClient {
             },
             oneose: () => {
               sub.close('eose');
+              settled.add(url);
               pendingRelays--;
               if (pendingRelays <= 0) {
                 resolve(events);
               }
             },
             onclose: () => {
+              settled.add(url);
               pendingRelays--;
               if (pendingRelays <= 0) {
                 resolve(events);
@@ -367,7 +396,7 @@ export class AMBRelayClient {
         }
       }),
       new Promise<NostrEvent[]>((_, reject) =>
-        setTimeout(() => reject(new Error('Query timeout')), DEFAULT_TIMEOUT)
+        setTimeout(() => reject(new Error('Query timeout')), this.queryTimeoutMs)
       ),
     ]).catch((err) => {
       // Strict callers need outage/timeout distinguishable from an empty
@@ -379,24 +408,45 @@ export class AMBRelayClient {
       return [] as NostrEvent[];
     });
 
+    if (opts?.diag) {
+      opts.diag.unreachable = unreachable;
+      // A connected relay that never reached EOSE/close by the deadline was
+      // still hanging — report it so an empty result isn't mistaken for an
+      // empty corpus.
+      opts.diag.timedOut = connectedRelays.filter((u) => !settled.has(u));
+    }
     return result;
   }
 
   // ============ Core query implementation ============
 
-  private async queryRelays(filter: Filter, relaySelection?: string[]): Promise<NostrEvent[]> {
+  private async queryRelays(
+    filter: Filter,
+    relaySelection?: string[],
+    diag?: RelayQueryDiagnostics
+  ): Promise<NostrEvent[]> {
     const relays = this.resolveRelays(relaySelection);
     if (relays.length === 0) {
       return [];
     }
 
     // Query with timeout
+    let timedOut = false;
     const events = await Promise.race([
       this.pool.querySync(relays, filter),
       new Promise<NostrEvent[]>((_, reject) =>
-        setTimeout(() => reject(new Error('Query timeout')), DEFAULT_TIMEOUT)
+        setTimeout(() => reject(new Error('Query timeout')), this.queryTimeoutMs)
       ),
-    ]).catch(() => [] as NostrEvent[]);
+    ]).catch(() => {
+      timedOut = true;
+      return [] as NostrEvent[];
+    });
+    if (diag) {
+      diag.unreachable = [];
+      // querySync can't attribute a stall to one relay, so on timeout every
+      // queried relay is reported as possibly-incomplete (coarse but honest).
+      diag.timedOut = timedOut ? relays : [];
+    }
 
     // Deduplicate by event ID (same event from multiple relays)
     const seen = new Set<string>();

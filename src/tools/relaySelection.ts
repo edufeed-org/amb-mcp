@@ -1,4 +1,27 @@
-import { UnknownRelayError, type AMBRelayClient } from '../relay/client.js';
+import { UnknownRelayError, type AMBRelayClient, type RelayQueryDiagnostics } from '../relay/client.js';
+
+/** A fresh diagnostics collector to pass into a query and read back after. */
+export function newRelayDiagnostics(): RelayQueryDiagnostics {
+  return { unreachable: [], timedOut: [] };
+}
+
+/**
+ * Turn per-relay query diagnostics into response fields a caller can surface.
+ * Returns {} when every relay answered — so a genuinely empty result stays
+ * clean — and a warning naming the relays that didn't when some stalled or
+ * refused, so an LLM never reads a transient outage as "nothing found."
+ */
+export function relayDiagnosticsFields(diag: RelayQueryDiagnostics): Record<string, unknown> {
+  const affected = [...new Set([...diag.timedOut, ...diag.unreachable])];
+  if (affected.length === 0) return {};
+  return {
+    relaysIncomplete: affected,
+    warning:
+      `These relays did not fully answer (timed out or unreachable): ${affected.join(', ')}. ` +
+      `Results may be incomplete — an empty or short result here is NOT proof the corpus is ` +
+      `empty; tell the user a source was unreachable and offer to retry.`,
+  };
+}
 
 /**
  * Shared tool-error payload for a per-call `relays` selection that named a

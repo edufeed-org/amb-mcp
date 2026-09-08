@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AMBRelayClient } from '../relay/client.js';
-import { relaysNotSearched, resolveRelaysOrError } from './relaySelection.js';
+import {
+  relaysNotSearched, resolveRelaysOrError, newRelayDiagnostics, relayDiagnosticsFields,
+} from './relaySelection.js';
 import { buildFilter, type SearchParams } from '../relay/filters.js';
 import { eventsToAMBResources, toSimplifiedResource, type SimplifiedAMBResource } from '../utils/transform.js';
 import { findActorCandidates, type ActorCandidate } from './resolvePublisher.js';
@@ -13,6 +15,10 @@ export interface ResourceSearchResult {
   actorCandidates?: ActorCandidate[];
   /** Recovery guidance for the zero-match actor-filter case. */
   hint?: string;
+  /** Relays that timed out or were unreachable (an empty result may be incomplete). */
+  relaysIncomplete?: string[];
+  /** Human/LLM-facing warning when relaysIncomplete is non-empty. */
+  warning?: string;
 }
 
 /**
@@ -29,14 +35,19 @@ export async function runResourceSearch(
 ): Promise<ResourceSearchResult> {
   const { filter, search } = buildFilter(params);
 
+  const diag = newRelayDiagnostics();
   const events = search
-    ? await client.search(search, filter, relays)
-    : await client.query(filter, relays);
+    ? await client.search(search, filter, relays, diag)
+    : await client.query(filter, relays, diag);
 
   const resources = eventsToAMBResources(events);
   const lang = params.language || 'de';
   const simplified = resources.map((r) => toSimplifiedResource(r, lang));
-  const result: ResourceSearchResult = { total: simplified.length, resources: simplified };
+  const result: ResourceSearchResult = {
+    total: simplified.length,
+    resources: simplified,
+    ...relayDiagnosticsFields(diag),
+  };
 
   const actorName = params.publisherName ?? params.creatorName;
   if (simplified.length === 0 && actorName) {

@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { AMBRelayClient } from '../relay/client.js';
-import { relaysNotSearched, resolveRelaysOrError } from './relaySelection.js';
+import {
+  relaysNotSearched, resolveRelaysOrError, newRelayDiagnostics, relayDiagnosticsFields,
+} from './relaySelection.js';
 import { buildContentFilter, type ContentSearchParams } from '../relay/filters.js';
 import { transformContentEvent } from '../content/transform.js';
 import { parseSnippets, attachSnippets, SNIPPET_KIND } from '../content/snippet.js';
@@ -15,10 +17,11 @@ import type { SimplifiedContentResult } from '../content/types.js';
 export async function runContentSearch(
   client: Pick<AMBRelayClient, 'queryEvents'>,
   params: ContentSearchParams & { language?: string; relays?: string[] }
-): Promise<{ total: number; results: SimplifiedContentResult[] }> {
+): Promise<{ total: number; results: SimplifiedContentResult[]; relaysIncomplete?: string[]; warning?: string }> {
   const language = params.language ?? 'de';
   const filter = buildContentFilter(params);
-  const events = await client.queryEvents(filter, params.relays);
+  const diag = newRelayDiagnostics();
+  const events = await client.queryEvents(filter, params.relays, { diag });
 
   const snippetEvents = events.filter((e) => e.kind === SNIPPET_KIND);
 
@@ -38,7 +41,7 @@ export async function runContentSearch(
   const snippets = parseSnippets(snippetEvents);
   attachSnippets(results, keptEvents, snippets);
 
-  return { total: results.length, results };
+  return { total: results.length, results, ...relayDiagnosticsFields(diag) };
 }
 
 export function registerSearchContentTool(

@@ -1,0 +1,12 @@
+{
+  "kind": 777,
+  "content": "Bildungsveranstaltungen (NIP-52 Zeit-Events, kind 31923) im edufeed-Netzwerk — Scope für Antworten zu Veranstaltungen.",
+  "tags": [
+    ["cmd", "REQ"],
+    ["name", "Edufeed Veranstaltungen"],
+    ["k", "31923"],
+    ["t", "edufeed"],
+    ["t", "veranstaltungen"],
+    ["alt", "Spell: REQ für kind-31923 Veranstaltungen"]
+  ]
+}

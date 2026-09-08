@@ -23,6 +23,8 @@ import {
 } from './relay/catalog.js';
 import { SERVER_NAME, SERVER_VERSION } from './server-info.js';
 import type { ToolProfile } from './tools/index.js';
+import { AMBRelayClient } from './relay/client.js';
+import { IndexerClient } from './indexer/client.js';
 
 // Deliberate deviation: insufficient scope yields a session built WITHOUT those tools
 // (absent from tools/list; a call returns MCP method-not-found) rather than HTTP 403.
@@ -96,6 +98,8 @@ const CALENDAR_RELAYS =
   process.env.CALENDAR_RELAYS?.split(',').filter(Boolean) || ['wss://relay.edufeed.org'];
 const CALENDAR_AUTHOR_SETS =
   process.env.CALENDAR_AUTHOR_SETS?.split(',').filter(Boolean) || [];
+const SPELL_RELAYS = process.env.SPELL_RELAYS?.split(',').filter(Boolean) || ['wss://relay.edufeed.org'];
+const indexer = IndexerClient.fromEnv(process.env.INDEXER_ENDPOINTS, process.env.INDEXER_API_TOKEN, process.env.INDEXER_API_TOKENS);
 
 const HTTP_PORT = Number(process.env.HTTP_PORT ?? 3000);
 const HTTP_HOST = process.env.HTTP_HOST ?? '0.0.0.0';
@@ -148,6 +152,12 @@ async function main() {
 
   const verify = createJwtVerifier({ issuer: OAUTH_ISSUER, audience: OAUTH_AUDIENCE, jwksUri: OAUTH_JWKS_URI });
 
+  // Shared across all sessions (unlike ambClient/calendarClient): kind-777
+  // spells and kind-3 contact lists are not session-scoped state, so one
+  // long-lived client — same lifecycle as `indexer` — serves every session's
+  // search_passages calls.
+  const spellClient = new AMBRelayClient(SPELL_RELAYS);
+
   const handle = await startHttpServer({
     port: HTTP_PORT,
     host: HTTP_HOST,
@@ -176,6 +186,8 @@ async function main() {
         {
           ambExtraRelays: relays.extras,
           defaultsFromConnectorUrl: relays.fromConnectorUrl,
+          spellClient,
+          indexer: indexer ?? undefined,
         },
       );
       return { server, dispose };
@@ -195,6 +207,7 @@ async function main() {
     } catch (err) {
       console.error('Error closing HTTP server:', err);
     }
+    spellClient.close();
     process.exit(0);
   };
 

@@ -1,0 +1,12 @@
+{
+  "kind": 777,
+  "content": "Wissenschaftliche Publikationen (NKBIP-01, kind 30040) — Scope für Antworten, die sich auf Publikations-Volltexte stützen sollen.",
+  "tags": [
+    ["cmd", "REQ"],
+    ["name", "Edufeed Publikationen"],
+    ["k", "30040"],
+    ["t", "edufeed"],
+    ["t", "publikationen"],
+    ["alt", "Spell: REQ für alle kind-30040 Publikationen"]
+  ]
+}

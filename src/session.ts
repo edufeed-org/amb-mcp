@@ -4,6 +4,7 @@ import { AMBRelayClient } from './relay/client.js';
 import { registerTools } from './tools/index.js';
 import { registerResources } from './resources/index.js';
 import { SERVER_NAME, SERVER_VERSION, SERVER_INSTRUCTIONS } from './server-info.js';
+import type { IndexerClient } from './indexer/client.js';
 
 export interface SessionServer {
   server: McpServer;
@@ -23,7 +24,12 @@ export function buildSessionServer(
   ambRelays: string | string[],
   calendarRelays: string | string[],
   profile: import('./tools/index.js').ToolProfile = { read: true, extract: true, write: true },
-  options?: { ambExtraRelays?: string[]; defaultsFromConnectorUrl?: boolean },
+  options?: {
+    ambExtraRelays?: string[];
+    defaultsFromConnectorUrl?: boolean;
+    spellClient?: AMBRelayClient;
+    indexer?: IndexerClient;
+  },
 ): SessionServer {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -35,6 +41,8 @@ export function buildSessionServer(
   const calendarClient = new AMBRelayClient(calendarRelays);
   registerTools(server, ambClient, calendarClient, profile, {
     defaultsFromConnectorUrl: options?.defaultsFromConnectorUrl,
+    spellClient: options?.spellClient,
+    indexer: options?.indexer,
   });
   registerResources(server, ambClient);
 

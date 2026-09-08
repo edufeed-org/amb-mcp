@@ -24,6 +24,8 @@ import { registerResolvePublisherTool } from './resolvePublisher.js';
 import { registerCalendarTools } from './calendar.js';
 import { registerExtractTool } from './extract.js';
 import { registerSearchContentTool } from './searchContent.js';
+import { registerSearchPassagesTool } from './searchPassages.js';
+import type { IndexerClient } from '../indexer/client.js';
 
 export interface ToolProfile {
   read?: boolean;
@@ -42,7 +44,11 @@ export function registerTools(
   client: AMBRelayClient,
   calendarClient?: AMBRelayClient,
   profile: ToolProfile = { read: true, extract: true, write: true },
-  options?: { defaultsFromConnectorUrl?: boolean },
+  options?: {
+    defaultsFromConnectorUrl?: boolean;
+    spellClient?: AMBRelayClient;
+    indexer?: IndexerClient;
+  },
 ): void {
   if (profile.read) {
     // Query / read tools
@@ -60,6 +66,9 @@ export function registerTools(
     registerResolveAuthorTool(server, client);
     registerResolvePublisherTool(server, client);
     if (calendarClient) registerCalendarTools(server, calendarClient);
+    if (options?.indexer && options?.spellClient) {
+      registerSearchPassagesTool(server, client, options.spellClient, options.indexer);
+    }
   }
 
   if (profile.extract) {

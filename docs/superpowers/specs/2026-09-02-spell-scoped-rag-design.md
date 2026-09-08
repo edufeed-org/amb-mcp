@@ -155,8 +155,12 @@ empty-but-successful grounding.
 - amb-mcp env:
   - `INDEXER_ENDPOINTS` — comma-separated `wss://relay=https://indexer-base`
     pairs mapping each AMB relay to its indexer's HTTP base URL.
-  - `INDEXER_API_TOKEN` — bearer token for `/search_chunks` (single token to
-    start; per-endpoint tokens only if instances ever diverge).
+  - `INDEXER_API_TOKEN` — bearer token for `/search_chunks` (shared default).
+  - `INDEXER_API_TOKENS` — per-relay overrides as `wss://relay=token` pairs.
+    (The spec originally deferred this to "if instances ever diverge" — first
+    e2e test against the deployed dev/oersi/sodix stacks showed they already
+    do: each instance has its own vault token. Every `INDEXER_ENDPOINTS`
+    entry must be covered by one of the two; a gap fails at startup.)
   - `SPELL_RELAYS` — default `wss://relay.edufeed.org`.
 - The tool resolves the indexer from the call's effective relay. A relay
   without a mapping → error "no passage index for this relay".

@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { normalizeURL } from 'nostr-tools/utils';
 import { SpellError } from '../spells/types.js';
 
@@ -9,12 +10,25 @@ export interface PassageHit {
   text?: string;
   snippet: string;
   heading?: string;
-  section_path?: string;
+  section_path?: string[];
   page?: number;
   source_url?: string;
   score: number;
   amb?: Record<string, unknown>;
 }
+
+/**
+ * Deliberately shallow: enforce only what the tool's contract depends on
+ * (an array of hits, each carrying its parent coord and score) and pass
+ * every other field through untouched, so benign indexer additions never
+ * break the client. This exists to turn contract drift — an error payload
+ * with status 200, a renamed field after version skew — into a clean
+ * indexer_error instead of undefined passages downstream.
+ */
+const responseSchema = z.object({
+  hits: z.array(z.object({ event_coord: z.string(), score: z.number() }).passthrough()),
+  total: z.number().optional(),
+});
 
 function normKey(url: string): string {
   try {
@@ -105,13 +119,24 @@ export class IndexerClient {
     if (!res.ok) {
       throw new SpellError('indexer_error', `indexer at ${base} answered ${res.status}`);
     }
-    let data: { hits: PassageHit[]; total: number };
+    let raw: unknown;
     try {
-      data = (await res.json()) as { hits: PassageHit[]; total: number };
+      raw = await res.json();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new SpellError('indexer_error', `indexer at ${base} returned invalid JSON: ${msg}`);
     }
-    return data;
+    const parsed = responseSchema.safeParse(raw);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      throw new SpellError(
+        'indexer_error',
+        `indexer at ${base} returned an unexpected response shape: ${issue.path.join('.') || '(root)'}: ${issue.message}`
+      );
+    }
+    return {
+      hits: parsed.data.hits as unknown as PassageHit[],
+      total: parsed.data.total ?? parsed.data.hits.length,
+    };
   }
 }

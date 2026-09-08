@@ -103,3 +103,42 @@ describe('searchChunks', () => {
       .rejects.toMatchObject({ code: 'indexer_error' });
   });
 });
+
+describe('response shape validation', () => {
+  const client = (body: unknown) => new IndexerClient(
+    new Map([['wss://r', 'https://ix']]),
+    'tok',
+    (async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch,
+  );
+
+  it('throws indexer_error on a 200 JSON body without hits (e.g. an error payload)', async () => {
+    await expect(client({ error: 'oops' }).searchChunks('wss://r', { q: 'q', k: 1, filter: {} }))
+      .rejects.toMatchObject({ code: 'indexer_error', message: expect.stringContaining('unexpected response shape') });
+  });
+
+  it('throws indexer_error when hits is not an array', async () => {
+    await expect(client({ hits: 'nope', total: 0 }).searchChunks('wss://r', { q: 'q', k: 1, filter: {} }))
+      .rejects.toMatchObject({ code: 'indexer_error' });
+  });
+
+  it('throws indexer_error when a hit lacks event_coord or score', async () => {
+    await expect(client({ hits: [{ snippet: 's' }], total: 1 }).searchChunks('wss://r', { q: 'q', k: 1, filter: {} }))
+      .rejects.toMatchObject({ code: 'indexer_error' });
+  });
+
+  it('passes through real-world hits untouched, extra fields and array section_path included', async () => {
+    const hit = {
+      chunk_id: 'c:0', event_id: 'e', event_coord: '30142:p:d', chunk_idx: 0,
+      snippet: 's', score: 0.7, section_path: ['A', 'B'],
+      amb: { name: 'X' }, some_future_field: 42,
+    };
+    const res = await client({ hits: [hit], total: 1 }).searchChunks('wss://r', { q: 'q', k: 1, filter: {} });
+    expect(res.total).toBe(1);
+    expect(res.hits[0]).toEqual(hit);
+  });
+
+  it('defaults total to hits.length when absent', async () => {
+    const res = await client({ hits: [{ event_coord: '30142:p:d', score: 1 }] }).searchChunks('wss://r', { q: 'q', k: 1, filter: {} });
+    expect(res.total).toBe(1);
+  });
+});

@@ -46,3 +46,18 @@ Example:
   ]
 }
 ```
+
+## Published events (2026-09-08)
+
+Signed by the dedicated edufeed-spells key
+`npub15mdyxe583fy4tvjcnrmmt424rrrxgzz8xm2nstuxtvcpqe0xga2s5sccrg`
+(pubkey `a6da4366878a4955b25898f7b5d55518c664084736d5382f865b301065e64755`,
+nsec in the homelab vault as `vault_edufeed_spells_nsec`), on
+`wss://relay.edufeed.org`:
+
+| Template | Kind | Event id |
+|---|---|---|
+| `edufeed-amb.json` | 777 | `4ff18aa905af38a7dfe6554b43807bed3e8ef332041a9c7c64dbb0dbe086044d` |
+| `publications.json` | 777 | `66c28eac15e3b194d182ccaf5d061bae3bb120e66d23f015e53f7d9b9d567f5b` |
+| `calendar-events.json` | 777 | `d7fb79130cf35ecfb9a23fde808f5fdd4c1f96811da397c979cbf2bc826fa5a1` |
+| `profile.json` | 0 | `4b88840a454e051c48d14fe199c79a4ddfff662fe33d934e5bbe144e8cdca7ea` |

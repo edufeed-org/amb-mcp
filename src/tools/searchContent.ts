@@ -41,7 +41,20 @@ export async function runContentSearch(
   return { total: results.length, results };
 }
 
-export function registerSearchContentTool(server: McpServer, client: AMBRelayClient): void {
+export function registerSearchContentTool(
+  server: McpServer,
+  client: AMBRelayClient,
+  opts?: { passagesAvailable?: boolean }
+): void {
+  const intentSentence = opts?.passagesAvailable
+    ? 'This is the tool for DISCOVERY intent — the user wants materials to browse ' +
+      '("finde/suche/empfiehl Materialien zu X"): present the items. For QUESTION ' +
+      'intent — the user wants an answer built from the content ("wie/warum/was ' +
+      'hilft bei X?") — prefer search_passages, which returns quotable fulltext ' +
+      'passages with citations; this tool then supplements the answer with ' +
+      'browsable links. '
+    : 'This is the default tool for ' +
+      'natural-language questions like "what can I do about inattentive students?". ';
   server.registerTool(
     'search_content',
     {
@@ -51,8 +64,8 @@ export function registerSearchContentTool(server: McpServer, client: AMBRelayCli
         'educational resources (kind 30142), long-form articles/blogs (30023), ' +
         'wikis (30818), projects (30143), measures (30144), and NKBIP-01 publications (30040 indices + 30041 sections — scientific articles, books). Results are interleaved and ranked by semantic passage match, ' +
         'and each carries the matched passage ("snippet") when available — use it to ' +
-        'answer the user, not just list links. This is the default tool for ' +
-        'natural-language questions like "what can I do about inattentive students?". ' +
+        'answer the user, not just list links. ' +
+        intentSentence +
         'Each result carries eventAuthor (the Nostr signer who uploaded the ' +
         'event — often an aggregator) plus, for resources, creator/publisher ' +
         '(who actually made and published the resource); these can differ, so ' +

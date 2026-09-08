@@ -211,9 +211,13 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
     }
 
     if (!transport) {
-      res.status(400).json({
+      // 404 per the Streamable HTTP spec: a request with an unknown or
+      // expired Mcp-Session-Id (e.g. after a server restart dropped the
+      // in-memory session map) MUST get 404 so the client transparently
+      // re-initializes, instead of surfacing a tool error to the user.
+      res.status(404).json({
         jsonrpc: '2.0',
-        error: { code: -32000, message: 'No valid session: send an initialize request first' },
+        error: { code: -32001, message: 'Session not found: send an initialize request to start a new session' },
         id: null,
       });
       return;
@@ -227,9 +231,10 @@ export async function startHttpServer(opts: HttpServerOptions): Promise<HttpServ
     const sessionId = typeof sid === 'string' ? sid : undefined;
     const transport = sessionId ? transports.get(sessionId) : undefined;
     if (!transport) {
-      res.status(400).json({
+      // 404, not 400 — see the POST handler: spec-mandated re-init signal.
+      res.status(404).json({
         jsonrpc: '2.0',
-        error: { code: -32000, message: 'Invalid or missing session' },
+        error: { code: -32001, message: 'Session not found: send an initialize request to start a new session' },
         id: null,
       });
       return;

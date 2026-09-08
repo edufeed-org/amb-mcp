@@ -52,8 +52,9 @@ export function registerTools(
 ): void {
   if (profile.read) {
     // Query / read tools
+    const passagesAvailable = !!(options?.indexer && options?.spellClient);
     registerSearchTool(server, client);
-    registerSearchContentTool(server, client);
+    registerSearchContentTool(server, client, { passagesAvailable });
     registerGetTool(server, client);
     registerBrowseSubjectsTool(server, client);
     registerBrowseResourceTypesTool(server, client);

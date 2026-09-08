@@ -87,7 +87,34 @@ describe('per-connection session config', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }),
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(404); // spec re-init signal, not a config error
     expect(builds).toBe(before);
+  });
+});
+
+describe('unknown session id', () => {
+  const call = (method: string, sid: string) =>
+    fetch(`${base}/mcp`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        'Mcp-Session-Id': sid,
+      },
+      body: method === 'POST'
+        ? JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
+        : undefined,
+    });
+
+  it('answers a POST with an expired/unknown Mcp-Session-Id with 404 (spec re-init signal)', async () => {
+    const res = await call('POST', 'no-such-session');
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe(-32001);
+  });
+
+  it('answers GET/DELETE with an unknown Mcp-Session-Id with 404', async () => {
+    expect((await call('GET', 'no-such-session')).status).toBe(404);
+    expect((await call('DELETE', 'no-such-session')).status).toBe(404);
   });
 });

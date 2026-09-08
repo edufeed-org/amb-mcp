@@ -229,20 +229,26 @@ export function registerSearchPassagesTool(
     {
       title: 'Grounded passage search (RAG) scoped by a spell',
       description:
-        'Retrieve the best-matching fulltext passages for a question, restricted to a ' +
-        'scope defined by a grimoire spell (kind 777) — pass a published spell (nevent or ' +
-        'event id) OR inline scope (authors/kinds/tag/search/since/until); one is required, not both. ' +
-        'Returns ranked passages with citations (source resource, page, heading, source URL) — ' +
-        'use them to answer the user and cite the sources. Keep `question` topic-only; route source ' +
-        'restrictions ("nur Content von X") into the scope parameters: a metadata publisher ' +
-        '(most organisations — resolve_publisher finds the exact spelling) goes into `search` as a ' +
-        'QUOTED field filter, e.g. search:\'publisher.name:"LEHRE LADEN"\' (unquoted multi-word ' +
-        'names match nothing); a Nostr signing account (resolve_author → pubkey) goes into `authors`. ' +
-        'The response also carries the ' +
-        'canonical spell for the scope; publish it (e.g. via grimoire) to make the scope reusable. ' +
-        'Spells may use $me/$contacts; they resolve to the calling user (pass `me` if the ' +
-        'transport is anonymous). Fails rather than widening scope: an empty scope or ' +
-        'unreachable index is an error, never an unscoped search.',
+        'THE DEFAULT TOOL FOR QUESTION-SHAPED QUERIES ("wie/warum/was hilft bei X?", ' +
+        '"how do I…?"): retrieves the best-matching fulltext passages from the corpus ' +
+        'and returns them with citations (source resource, page, heading, source URL) — ' +
+        'answer the user FROM the passages and cite each source. (For discovery intent — ' +
+        '"finde/empfiehl Materialien" — use search_content instead, or afterwards to offer ' +
+        'browsable links.) Keep `question` topic-only. Scope is required but simple: with ' +
+        'no source restriction from the user, pass the content kinds (e.g. kinds:[30142] ' +
+        'for educational resources, [30040,30041] for publications, [30023] for articles). ' +
+        'Route source restrictions ("nur Content von X") into the scope parameters: a ' +
+        'metadata publisher (most organisations — resolve_publisher finds the exact ' +
+        'spelling) goes into `search` as a QUOTED field filter, e.g. ' +
+        'search:\'publisher.name:"LEHRE LADEN"\' (unquoted multi-word names match nothing); ' +
+        'a Nostr signing account (resolve_author → pubkey) goes into `authors`. ' +
+        'A published grimoire spell (kind 777, nevent or event id) can replace inline scope ' +
+        'entirely; the response carries the canonical spell for whatever scope was used — ' +
+        'publish it (e.g. via grimoire) to make the scope reusable. Spells may use ' +
+        '$me/$contacts; they resolve to the calling user (pass `me` if the transport is ' +
+        'anonymous). Fails rather than widening scope: an empty scope, unreachable relay ' +
+        '(relay_unreachable — tell the user to retry), or unreachable index is a typed ' +
+        'error, never a silently unscoped search.',
       inputSchema: {
         question: z.string().describe('The question or topic to find grounding passages for.'),
         spell: z.string().optional().describe('Published spell: nevent, note id, or 64-hex event id.'),

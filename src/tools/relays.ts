@@ -37,7 +37,8 @@ export function runListRelays(
     notes.push(
       'extraRelays are NOT searched by default — they hold different corpora. ' +
         'To query one, pass it in the relays parameter of search_content, ' +
-        'search_resources, or get_resource.'
+        'search_resources, or get_resource — by full URL or short name ' +
+        '(the hostname or first label, e.g. "oersi", "sodix").'
     );
   }
 

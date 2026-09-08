@@ -17,7 +17,9 @@ describe('unknownRelayPayload', () => {
       unknownRelays: ['wss://evil.example'],
       selectableRelays: ['wss://amb-relay.example', 'wss://oersi.example'],
       message:
-        'The relays parameter only accepts relays from list_relays (default or extra).',
+        'The relays parameter only accepts relays from list_relays (default or extra). ' +
+        'Name each by its full URL or its short name — the hostname or first label ' +
+        '(e.g. "oersi", "sodix", "amb-relay").',
     });
   });
 });
@@ -56,7 +58,9 @@ describe('resolveRelaysOrError', () => {
         unknownRelays: ['wss://evil.example'],
         selectableRelays: ['wss://amb-relay.example', 'wss://oersi.example'],
         message:
-          'The relays parameter only accepts relays from list_relays (default or extra).',
+          'The relays parameter only accepts relays from list_relays (default or extra). ' +
+        'Name each by its full URL or its short name — the hostname or first label ' +
+        '(e.g. "oersi", "sodix", "amb-relay").',
       },
     });
   });

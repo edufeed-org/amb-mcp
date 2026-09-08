@@ -10,7 +10,9 @@ export function unknownRelayPayload(err: UnknownRelayError): Record<string, unkn
     unknownRelays: err.unknownRelays,
     selectableRelays: err.selectableRelays,
     message:
-      'The relays parameter only accepts relays from list_relays (default or extra).',
+      'The relays parameter only accepts relays from list_relays (default or extra). ' +
+      'Name each by its full URL or its short name — the hostname or first label ' +
+      '(e.g. "oersi", "sodix", "amb-relay").',
   };
 }
 

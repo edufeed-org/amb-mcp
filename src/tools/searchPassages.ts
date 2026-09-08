@@ -260,7 +260,7 @@ export function registerSearchPassagesTool(
         since: z.string().optional().describe('Inline scope: absolute Unix seconds or relative (7d, 1mo, now).'),
         until: z.string().optional().describe('Inline scope: absolute Unix seconds or relative.'),
         me: z.string().optional().describe('Who $me refers to (npub or hex). Defaults to the calling identity.'),
-        relays: z.array(z.string()).optional().describe('Relay selection (list_relays set). First mapped relay is used.'),
+        relays: z.array(z.string()).optional().describe('Relay selection (list_relays set), by full URL or short name (e.g. "oersi", "sodix"). First mapped relay is used.'),
         limit: z.number().min(1).max(25).optional().default(10).describe('Passages to return (1-25, default 10).'),
       },
     },

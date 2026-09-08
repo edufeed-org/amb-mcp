@@ -42,7 +42,7 @@ export interface RelayCatalog {
 }
 
 /** Names a single relay URL answers to, most specific first. */
-function namesFor(url: string): string[] {
+export function namesFor(url: string): string[] {
   const names = [url.toLowerCase()];
   try {
     const parsed = new URL(url);

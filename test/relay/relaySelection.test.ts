@@ -82,6 +82,52 @@ describe('relay selection', () => {
     expect(caught).toBeInstanceOf(UnknownRelayError);
     expect((caught as UnknownRelayError).unknownRelays).toEqual(['not a url']);
   });
+
+  it('resolveRelays accepts the short hostname label (same rule as the ?relays= connector param)', () => {
+    const client = makeClient();
+    expect(client.resolveRelays(['oersi'])).toEqual([EXTRA]);
+    expect(client.resolveRelays(['OERSI'])).toEqual([EXTRA]); // case-insensitive
+    expect(client.resolveRelays(['amb-relay'])).toEqual([DEFAULT]);
+  });
+
+  it('resolveRelays accepts the bare hostname', () => {
+    const client = makeClient();
+    expect(client.resolveRelays(['oersi.example'])).toEqual([EXTRA]);
+  });
+
+  it('resolveRelays resolves a mix of full URL, hostname, and label together', () => {
+    const client = makeClient();
+    expect(client.resolveRelays(['oersi', DEFAULT])).toEqual([EXTRA, DEFAULT]);
+  });
+
+  it('resolveRelays still rejects an unknown label', () => {
+    const client = makeClient();
+    let caught: unknown;
+    try {
+      client.resolveRelays(['sodix']);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UnknownRelayError);
+    expect((caught as UnknownRelayError).unknownRelays).toEqual(['sodix']);
+  });
+
+  it('does not resolve a short label claimed by two relays (ambiguous → longer forms only)', () => {
+    // Two relays sharing the first label "relay" — the label is ambiguous.
+    const client = new AMBRelayClient(['wss://relay.a.example'], {
+      extraRelays: ['wss://relay.b.example'],
+    });
+    let caught: unknown;
+    try {
+      client.resolveRelays(['relay']);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UnknownRelayError);
+    // But the full URLs still reach both.
+    expect(client.resolveRelays(['wss://relay.a.example'])).toEqual(['wss://relay.a.example']);
+    expect(client.resolveRelays(['wss://relay.b.example'])).toEqual(['wss://relay.b.example']);
+  });
 });
 
 describe('runtime relay mutation vs extras', () => {

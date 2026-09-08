@@ -158,7 +158,7 @@ export function registerGetTool(server: McpServer, client: AMBRelayClient): void
           .describe(
             'Restrict the lookup to specific relays — pass the relays a search found the ' +
               'result on. Only relays returned by list_relays (default or extra) are ' +
-              'accepted. Default: the default relay set.'
+              'accepted, by full URL or short name (e.g. "oersi"). Default: the default relay set.'
           ),
       },
     },

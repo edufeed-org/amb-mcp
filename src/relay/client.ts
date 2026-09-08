@@ -1,6 +1,7 @@
 import { SimplePool, type Filter, type NostrEvent } from 'nostr-tools';
 import { normalizeURL } from 'nostr-tools/utils';
 import WebSocket from 'ws';
+import { namesFor } from './catalog.js';
 
 // Node 20 (the production runtime image) has no global WebSocket.
 // SimplePool from `nostr-tools` root reads its websocketImplementation from a
@@ -141,31 +142,48 @@ export class AMBRelayClient {
   /**
    * Validate a per-call relay selection against the selectable set.
    *
-   * No/empty selection falls back to the default relays. Requested URLs are
-   * matched modulo NIP-01 URL normalization but returned in their configured
-   * form (the strings the pool already knows). Any relay outside the
-   * selectable set throws UnknownRelayError.
+   * No/empty selection falls back to the default relays. A requested value is
+   * matched by the SAME rule the `?relays=` connector param uses (see
+   * catalog.ts `namesFor`): full URL, host, hostname, or the first hostname
+   * label — case-insensitively — plus NIP-01 URL normalization for
+   * trailing-slash tolerance. A short label claimed by two selectable relays
+   * is ambiguous and does not resolve (the longer forms still reach both).
+   * Matches return the relay's configured form (the string the pool knows).
+   * Any value outside the selectable set throws UnknownRelayError.
    */
   resolveRelays(requested?: string[]): string[] {
     if (!requested || requested.length === 0) {
       return this.getRelays();
     }
-    const byNormalized = new Map<string, string>();
-    for (const url of this.getSelectableRelays()) {
-      byNormalized.set(normalizeForMatch(url) ?? url, url);
+    const selectable = this.getSelectableRelays();
+    const byName = new Map<string, string>();
+    const ambiguous = new Set<string>();
+    const register = (name: string, url: string) => {
+      const existing = byName.get(name);
+      if (existing === undefined) byName.set(name, url);
+      else if (existing !== url) ambiguous.add(name);
+    };
+    for (const url of selectable) {
+      for (const name of namesFor(url)) register(name, url);
+      const norm = normalizeForMatch(url);
+      if (norm) register(norm.toLowerCase(), url);
     }
+    for (const name of ambiguous) byName.delete(name);
+
     const resolved: string[] = [];
     const unknown: string[] = [];
-    for (const url of requested) {
-      const match = byNormalized.get(normalizeForMatch(url) ?? url);
+    for (const req of requested) {
+      const match =
+        byName.get(req.trim().toLowerCase()) ??
+        byName.get((normalizeForMatch(req) ?? '').toLowerCase());
       if (match === undefined) {
-        unknown.push(url);
+        unknown.push(req);
       } else if (!resolved.includes(match)) {
         resolved.push(match);
       }
     }
     if (unknown.length > 0) {
-      throw new UnknownRelayError(unknown, this.getSelectableRelays());
+      throw new UnknownRelayError(unknown, selectable);
     }
     return resolved;
   }

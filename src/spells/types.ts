@@ -37,6 +37,7 @@ export type SpellErrorCode =
   | 'contacts_empty'
   | 'spell_not_found'
   | 'empty_scope'
+  | 'relay_unreachable'
   | 'no_indexer'
   | 'indexer_error';
 

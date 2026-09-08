@@ -45,6 +45,18 @@ export class UnknownRelayError extends Error {
   }
 }
 
+/**
+ * A strict query could not produce a trustworthy answer: no relay in the
+ * selection accepted a connection, or the query timed out before EOSE.
+ * Distinct from an empty result — the relay never (fully) answered.
+ */
+export class RelayUnreachableError extends Error {
+  constructor(public readonly relays: string[], reason: string) {
+    super(`relay(s) ${relays.join(', ')} unreachable: ${reason}`);
+    this.name = 'RelayUnreachableError';
+  }
+}
+
 /** Normalize for comparison only; configured URLs are kept verbatim. */
 function normalizeForMatch(url: string): string | null {
   try {
@@ -247,9 +259,15 @@ export class AMBRelayClient {
    * the full filter (so the REQ includes extended props), then immediately
    * patch sub.filters to remove them before any events arrive.
    */
-  async queryEvents(filter: Filter, relaySelection?: string[]): Promise<NostrEvent[]> {
+  async queryEvents(
+    filter: Filter,
+    relaySelection?: string[],
+    opts?: { strict?: boolean }
+  ): Promise<NostrEvent[]> {
+    const strict = opts?.strict ?? false;
     const relays = this.resolveRelays(relaySelection);
     if (relays.length === 0) {
+      if (strict) throw new RelayUnreachableError(relaySelection ?? [], 'no relays in selection');
       return [];
     }
 
@@ -267,7 +285,7 @@ export class AMBRelayClient {
     let pendingRelays: number;
 
     const result = await Promise.race([
-      new Promise<NostrEvent[]>(async (resolve) => {
+      new Promise<NostrEvent[]>(async (resolve, reject) => {
         const subs: Array<{ close(reason?: string): void }> = [];
         const connectedRelays: string[] = [];
 
@@ -282,7 +300,11 @@ export class AMBRelayClient {
 
         pendingRelays = connectedRelays.length;
         if (pendingRelays === 0) {
-          resolve([]);
+          if (strict) {
+            reject(new RelayUnreachableError(relays, 'no relay accepted a connection'));
+          } else {
+            resolve([]);
+          }
           return;
         }
 
@@ -329,7 +351,15 @@ export class AMBRelayClient {
       new Promise<NostrEvent[]>((_, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), DEFAULT_TIMEOUT)
       ),
-    ]).catch(() => [] as NostrEvent[]);
+    ]).catch((err) => {
+      // Strict callers need outage/timeout distinguishable from an empty
+      // result; everyone else keeps the lenient empty-array behavior.
+      if (strict) {
+        if (err instanceof RelayUnreachableError) throw err;
+        throw new RelayUnreachableError(relays, 'query timed out before EOSE');
+      }
+      return [] as NostrEvent[];
+    });
 
     return result;
   }

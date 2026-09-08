@@ -81,7 +81,7 @@ export async function buildScope(
     withCoord.push({ coord, created_at: e.created_at });
   }
   if (withCoord.length === 0) {
-    throw new SpellError('empty_scope', 'spell matched no events on the relay — nothing to ground on');
+    throw new SpellError('empty_scope', 'the relay answered but the spell matched no events — nothing to ground on (an unreachable relay is reported as relay_unreachable, not this)');
   }
   withCoord.sort((a, b) => b.created_at - a.created_at);
   const truncated = withCoord.length > SCOPE_CAP;

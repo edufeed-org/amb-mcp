@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { nip19 } from 'nostr-tools';
 import type { Event as NostrEvent, Filter } from 'nostr-tools';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { AMBRelayClient } from '../relay/client.js';
+import { AMBRelayClient, RelayUnreachableError } from '../relay/client.js';
 import { IndexerClient, type PassageHit } from '../indexer/client.js';
 import { SPELL_KIND, SpellError, type Spell } from '../spells/types.js';
 import {
@@ -187,7 +187,21 @@ export async function runSearchPassages(
     me: resolveMe(params.me, extra),
     fetchContacts: deps.fetchContacts,
   });
-  const scope = await buildScope(filter, deps.queryContentEvents);
+  let scope;
+  try {
+    scope = await buildScope(filter, deps.queryContentEvents);
+  } catch (err) {
+    // A dead or timing-out relay must be reported as such, not as an empty
+    // scope — the user can retry an outage; an empty scope needs a different
+    // spell. The strict query path throws RelayUnreachableError for this.
+    if (err instanceof RelayUnreachableError) {
+      throw new SpellError(
+        'relay_unreachable',
+        `content relay ${deps.relay} did not answer (unreachable or timed out) — the scope could not be determined; this is not an empty result, try again later`
+      );
+    }
+    throw err;
+  }
   const k = Math.min(params.limit ?? 10, 25);
   const res = await deps.searchChunks(deps.relay, { q: params.question, k, filter: scope.chunkFilter });
 
@@ -252,7 +266,7 @@ export function registerSearchPassagesTool(
       const relay = selection.relays.find((r) => indexer.forRelay(r)) ?? selection.relays[0];
       const deps: SearchPassagesDeps = {
         relay,
-        queryContentEvents: (f) => client.queryEvents(f, [relay]),
+        queryContentEvents: (f) => client.queryEvents(f, [relay], { strict: true }),
         fetchSpellEvent: makeFetchSpellEvent(spellClient),
         fetchContacts: makeFetchContacts(spellClient),
         searchChunks: (r, body) => indexer.searchChunks(r, body),

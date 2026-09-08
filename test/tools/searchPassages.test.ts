@@ -4,6 +4,7 @@ import {
   MAX_HINT_RELAYS, CONTACTS_FALLBACK_RELAY,
 } from '../../src/tools/searchPassages.js';
 import { SPELL_KIND } from '../../src/spells/types.js';
+import { RelayUnreachableError } from '../../src/relay/client.js';
 import type { Event as NostrEvent, Filter } from 'nostr-tools';
 
 const RELAY = 'wss://relay.edufeed.org';
@@ -216,5 +217,24 @@ describe('makeFetchContacts', () => {
     const fetchContacts = makeFetchContacts(spellClient, () => fallbackClient);
     const result = await fetchContacts('d'.repeat(64));
     expect(result).toEqual([]);
+  });
+});
+
+describe('relay outage vs empty scope', () => {
+  it('maps RelayUnreachableError from the scope query to relay_unreachable naming the relay', async () => {
+    const d = deps({
+      queryContentEvents: vi.fn(async () => { throw new RelayUnreachableError([RELAY], 'query timed out before EOSE'); }),
+    });
+    await expect(runSearchPassages(d, { question: 'x', kinds: [30142], search: 'klima' }, undefined))
+      .rejects.toMatchObject({
+        code: 'relay_unreachable',
+        message: expect.stringContaining(RELAY),
+      });
+  });
+
+  it('a reachable relay with zero matches still reports empty_scope', async () => {
+    const d = deps({ queryContentEvents: vi.fn(async () => []) });
+    await expect(runSearchPassages(d, { question: 'x', kinds: [30142], search: 'klima' }, undefined))
+      .rejects.toMatchObject({ code: 'empty_scope' });
   });
 });
